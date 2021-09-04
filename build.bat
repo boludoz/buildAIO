@@ -66,6 +66,6 @@ if %compile_only% NEQ true (
 		del "%zip%"
 	)
 	echo Creating %zip%
-	"build\7z.exe" a -scsUTF-8 "%zip%" COCBot\* CSV\* Help\* images\* imgxml\* Languages\* lib\* Strategies\* License.txt "MyBot.run Community Support Key.asc" README.md MyBot.run.au3 MyBot.run.exe MyBot.run.MiniGui.au3 MyBot.run.MiniGui.exe MyBot.run.txt MyBot.run.version.au3 MyBot.run.Watchdog.au3 MyBot.run.Watchdog.exe MyBot.run.Wmi.au3 MyBot.run.Wmi.exe lib\ModLibs\Updater\*
+	"build\7z.exe" a -scsUTF-8 "%zip%" COCBot\* CSV\* Help\* images\* imgxml\* Languages\* lib\* Strategies\* License.txt "MyBot.run Community Support Key.asc" README.md MyBot.run.au3 MyBot.run.exe MyBot.run.MiniGui.au3 MyBot.run.MiniGui.exe MyBot.run.txt MyBot.run.version.au3 MyBot.run.Watchdog.au3 MyBot.run.Watchdog.exe MyBot.run.Wmi.au3 MyBot.run.Wmi.exe lib\ModLibs\Updater\* /n
 )
-pause
+:: pause
