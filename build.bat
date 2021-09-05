@@ -27,8 +27,7 @@ if !compile_only! NEQ true (
 				del "!file!"
 				If Exist "!file!" (
 					echo Error deleting !file!... STOP BUILD!!!
-					::pause
-					exit /b 2
+					exit
 				)
 			)
 		)
@@ -50,11 +49,9 @@ for %%i in (%compile_files%) do (
 		echo Compiling !file!.exe
 		"build\aut2exe\aut2exe.exe" /in "%src%!file!_stripped.au3" /nopack /comp 2
 	)
-	::If Not Exist "!file!.exe" (
-	::	echo Compile error... retry?
-	::	pause
-	::	goto :retry
-	::)
+	If Not Exist "!file!.exe" (
+		echo Compile error...
+	)
 )
 
 :zip_only
@@ -68,4 +65,3 @@ if %compile_only% NEQ true (
 	echo Creating %zip%
 	"build\7z.exe" a -scsUTF-8 "%zip%" COCBot\* CSV\* Help\* images\* imgxml\* Languages\* lib\* Strategies\* License.txt "MyBot.run Community Support Key.asc" README.md MyBot.run.au3 MyBot.run.exe MyBot.run.MiniGui.au3 MyBot.run.MiniGui.exe MyBot.run.txt MyBot.run.version.au3 MyBot.run.Watchdog.au3 MyBot.run.Watchdog.exe MyBot.run.Wmi.au3 MyBot.run.Wmi.exe lib\ModLibs\Updater\*
 )
-:: pause
