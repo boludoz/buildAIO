@@ -6,7 +6,7 @@
 
 ; #INDEX# =======================================================================================================================
 ; Title .........: File
-; AutoIt Version : 3.3.15.4
+; AutoIt Version : 3.3.14.2
 ; Language ......: English
 ; Description ...: Functions that assist with files and directories.
 ; Author(s) .....: Brian Keene, Michael Michta, erifash, Jon, JdeB, Jeremy Landes, MrCreatoR, cdkid, Valik, Erik Pilsits, Kurt, Dale, guinness, DXRW4E, Melba23
@@ -41,18 +41,12 @@
 ; Modified.......: Xenobiologist, Gary, guinness, DXRW4E
 ; ===============================================================================================================================
 Func _FileCountLines($sFilePath)
-	FileReadToArray($sFilePath)
-	If @error Then Return SetError(@error, @extended, 0)
-	Return @extended
+	Local $hFileOpen = FileOpen($sFilePath, $FO_READ)
+	If $hFileOpen = -1 Then Return SetError(1, 0, 0)
 
-	#cs
-		Local $hFileOpen = FileOpen($sFilePath, $FO_READ)
-		If $hFileOpen = -1 Then Return SetError(1, 0, 0)
-
-		Local $sFileRead = StringStripWS(FileRead($hFileOpen), $STR_STRIPTRAILING)
-		FileClose($hFileOpen)
-		Return UBound(StringRegExp($sFileRead, "\R", $STR_REGEXPARRAYGLOBALMATCH)) + 1 - Int($sFileRead = "")
-	#ce
+	Local $sFileRead = StringStripWS(FileRead($hFileOpen), $STR_STRIPTRAILING)
+	FileClose($hFileOpen)
+	Return UBound(StringRegExp($sFileRead, "\R", $STR_REGEXPARRAYGLOBALMATCH)) + 1 - Int($sFileRead = "")
 EndFunc   ;==>_FileCountLines
 
 ; #FUNCTION# ====================================================================================================================
@@ -86,7 +80,6 @@ Func _FileListToArray($sFilePath, $sFilter = "*", $iFlag = $FLTA_FILESFOLDERS, $
 	If Not FileExists($sFilePath) Then Return SetError(1, 0, 0)
 	If StringRegExp($sFilter, "[\\/:><\|]|(?s)^\s*$") Then Return SetError(2, 0, 0)
 	If Not ($iFlag = 0 Or $iFlag = 1 Or $iFlag = 2) Then Return SetError(3, 0, 0)
-
 	Local $hSearch = FileFindFirstFile($sFilePath & $sFilter)
 	If @error Then Return SetError(4, 0, 0)
 	While 1
@@ -96,7 +89,6 @@ Func _FileListToArray($sFilePath, $sFilter = "*", $iFlag = $FLTA_FILESFOLDERS, $
 		$sFileList &= $sDelimiter & $sFullPath & $sFileName
 	WEnd
 	FileClose($hSearch)
-
 	If $sFileList = "" Then Return SetError(4, 0, 0)
 	Return StringSplit(StringTrimLeft($sFileList, 1), $sDelimiter)
 EndFunc   ;==>_FileListToArray
@@ -139,22 +131,22 @@ Func _FileListToArrayRec($sFilePath, $sMask = "*", $iReturn = $FLTAR_FILESFOLDER
 	Local $iHide_HS = 0, _
 			$sHide_HS = ""
 	; Check for H or S omitted
-	If BitAND($iReturn, $FLTAR_NOHIDDEN) Then
+	If BitAND($iReturn, 4) Then
 		$iHide_HS += 2
 		$sHide_HS &= "H"
-		$iReturn -= $FLTAR_NOHIDDEN
+		$iReturn -= 4
 	EndIf
-	If BitAND($iReturn, $FLTAR_NOSYSTEM) Then
+	If BitAND($iReturn, 8) Then
 		$iHide_HS += 4
 		$sHide_HS &= "S"
-		$iReturn -= $FLTAR_NOSYSTEM
+		$iReturn -= 8
 	EndIf
 
 	Local $iHide_Link = 0
 	; Check for link/junction omitted
-	If BitAND($iReturn, $FLTAR_NOLINK) Then
+	If BitAND($iReturn, 16) Then
 		$iHide_Link = 0x400
-		$iReturn -= $FLTAR_NOLINK
+		$iReturn -= 16
 	EndIf
 
 	Local $iMaxLevel = 0
@@ -298,8 +290,8 @@ Func _FileListToArrayRec($sFilePath, $sMask = "*", $iReturn = $FLTAR_FILESFOLDER
 				EndIf
 				; Extract data
 				$sName = DllStructGetData($tFile_Data, "FileName")
-				; Check for .. or . filename and skip
-				If $sName = ".." Or $sName = "." Then
+				; Check for .. return - only returned by the DllCall
+				If $sName = ".." Then
 					ContinueLoop
 				EndIf
 				$iAttribs = DllStructGetData($tFile_Data, "FileAttributes")
@@ -324,10 +316,6 @@ Func _FileListToArrayRec($sFilePath, $sMask = "*", $iReturn = $FLTAR_FILESFOLDER
 				; Check for end of folder
 				If @error Then
 					ExitLoop
-				EndIf
-				; Check for .. or . filename and skip
-				If $sName = ".." Or $sName = "." Then
-					ContinueLoop
 				EndIf
 				$sAttribs = @extended
 				; Check for folder
@@ -574,7 +562,7 @@ Func __FLTAR_ListToMask(ByRef $sMask, $sList)
 	; Check for invalid characters within list
 	If StringRegExp($sList, "\\|/|:|\<|\>|\|") Then Return 0
 	; Strip WS and insert | for ;
-	$sList = StringReplace(StringStripWS(StringRegExpReplace($sList, "\s*;\s*", ";"), BitOR($STR_STRIPLEADING, $STR_STRIPTRAILING)), ";", "|")
+	$sList = StringReplace(StringStripWS(StringRegExpReplace($sList, "\s*;\s*", ";"), $STR_STRIPLEADING + $STR_STRIPTRAILING), ";", "|")
 	; Convert to SRE pattern
 	$sList = StringReplace(StringReplace(StringRegExpReplace($sList, "[][$^.{}()+\-]", "\\$0"), "?", "."), "*", ".*?")
 	; Add prefix and suffix
@@ -587,7 +575,8 @@ EndFunc   ;==>__FLTAR_ListToMask
 ; Modified.......: guinness - Use the native ShellExecute function.
 ; ===============================================================================================================================
 Func _FilePrint($sFilePath, $iShow = @SW_HIDE)
-	Return ShellExecute($sFilePath, "", @WorkingDir, "print", $iShow = Default ? @SW_HIDE : $iShow)
+	If $iShow = Default Then $iShow = @SW_HIDE
+	Return ShellExecute($sFilePath, "", @WorkingDir, "print", $iShow)
 EndFunc   ;==>_FilePrint
 
 ; #FUNCTION# ====================================================================================================================
@@ -683,7 +672,7 @@ Func _FileReadToArray($sFilePath, ByRef $vReturn, $iFlags = $FRTA_COUNT, $sDelim
 			FileClose($hFileOpen)
 
 			If StringLen($sFileRead) Then
-				$vReturn = StringRegExp(@LF & $sFileRead, "(?|(\N+)\z|(\N*)(?:\R))", $STR_REGEXPARRAYGLOBALMATCH)
+				$vReturn = StringRegExp(@LF & $sFileRead, "(?|(\N+)\z|(\N*)(?:\R))", 3)
 				$vReturn[0] = UBound($vReturn) - 1
 			Else
 				Return SetError(2, 0, 0)
@@ -767,7 +756,10 @@ EndFunc   ;==>_FileWriteFromArray
 ; ===============================================================================================================================
 Func _FileWriteLog($sLogPath, $sLogMsg, $iFlag = -1)
 	Local $iOpenMode = $FO_APPEND
-	Local $sMsg = @YEAR & "-" & @MON & "-" & @MDAY & " " & @HOUR & ":" & @MIN & ":" & @SEC & " : " & $sLogMsg
+
+	Local $sDateNow = @YEAR & "-" & @MON & "-" & @MDAY
+	Local $sTimeNow = @HOUR & ":" & @MIN & ":" & @SEC
+	Local $sMsg = $sDateNow & " " & $sTimeNow & " : " & $sLogMsg
 
 	If $iFlag = Default Then $iFlag = -1
 	If $iFlag <> -1 Then
@@ -777,60 +769,56 @@ Func _FileWriteLog($sLogPath, $sLogMsg, $iFlag = -1)
 
 	; Open output file for appending to the end/overwriting, or use input file handle if passed
 	Local $hFileOpen = $sLogPath
-	If IsString($sLogPath) Then $hFileOpen = FileOpen($sLogPath, $iOpenMode)
+	If IsString($sLogPath) Then
+		$hFileOpen = FileOpen($sLogPath, $iOpenMode)
+	EndIf
 	If $hFileOpen = -1 Then Return SetError(1, 0, 0)
 
 	Local $iReturn = FileWriteLine($hFileOpen, $sMsg)
 
 	; Close file only if specified by a string path
 	If IsString($sLogPath) Then $iReturn = FileClose($hFileOpen)
-	If $iFlag <> -1 And Not IsString($sLogPath) Then SetExtended(1)
-	If $iReturn = 0 Then Return SetError(2, 0, 0)
-
+	If $iReturn <= 0 Then Return SetError(2, $iReturn, 0)
 	Return $iReturn
 EndFunc   ;==>_FileWriteLog
 
 ; #FUNCTION# ====================================================================================================================
 ; Author ........: cdkid
-; Modified.......: partypooper, MrCreatoR, Melba23
+; Modified.......: partypooper, MrCreatoR
 ; ===============================================================================================================================
-Func _FileWriteToLine($sFilePath, $iLine, $sText, $bOverWrite = False, $bFill = False)
-	If $bOverWrite = Default Then $bOverWrite = False
-	If $bFill = Default Then $bFill = False
-	If Not FileExists($sFilePath) Then Return SetError(2, 0, 0)
+Func _FileWriteToLine($sFilePath, $iLine, $sText, $bOverWrite = False)
 	If $iLine <= 0 Then Return SetError(4, 0, 0)
-	If Not (IsBool($bOverWrite) Or $bOverWrite = 0 Or $bOverWrite = 1) Then Return SetError(5, 0, 0)
 	If Not IsString($sText) Then
 		$sText = String($sText)
 		If $sText = "" Then Return SetError(6, 0, 0)
 	EndIf
-	If Not IsBool($bFill) Then Return SetError(7, 0, 0)
-	; Read current file into array
+	If $bOverWrite = Default Then $bOverWrite = False
+	If Not (IsBool($bOverWrite) Or $bOverWrite = 0 Or $bOverWrite = 1) Then Return SetError(5, 0, 0) ; For old versions.
+	If Not FileExists($sFilePath) Then Return SetError(2, 0, 0)
+
 	Local $aArray = FileReadToArray($sFilePath)
-	; Create empty array if empty file
-	If @error Then Local $aArray[0]
 	Local $iUBound = UBound($aArray) - 1
-	; If Fill option set
-	If $bFill Then
-		; If required resize array to allow line to be written
-		If $iUBound < $iLine Then
-			ReDim $aArray[$iLine]
-			$iUBound = $iLine - 1
-		EndIf
-	Else
-		If ($iUBound + 1) < $iLine Then Return SetError(1, 0, 0)
-	EndIf
-	; Write specific line - array is 0-based so reduce by 1 - and either replace or insert
-	$aArray[$iLine - 1] = ($bOverWrite ? $sText : $sText & @CRLF & $aArray[$iLine - 1])
-	; Concatenate array elements
-	Local $sData = ""
-	For $i = 0 To $iUBound
-		$sData &= $aArray[$i] & @CRLF
-	Next
-	$sData = StringTrimRight($sData, StringLen(@CRLF)) ; Required to strip trailing EOL
-	; Write data to file
+	If ($iUBound + 1) < $iLine Then Return SetError(1, 0, 0)
+
 	Local $hFileOpen = FileOpen($sFilePath, FileGetEncoding($sFilePath) + $FO_OVERWRITE)
 	If $hFileOpen = -1 Then Return SetError(3, 0, 0)
+
+	Local $sData = ""
+	$iLine -= 1 ; Now the array is 0-based, so reduce the line number by 1.
+	For $i = 0 To $iUBound
+		If $i = $iLine Then
+			If $bOverWrite Then
+				If $sText Then $sData &= $sText & @CRLF
+			Else
+				$sData &= $sText & @CRLF & $aArray[$i] & @CRLF
+			EndIf
+		ElseIf $i < $iUBound Then
+			$sData &= $aArray[$i] & @CRLF
+		ElseIf $i = $iUBound Then
+			$sData &= $aArray[$i]
+		EndIf
+	Next
+
 	FileWrite($hFileOpen, $sData)
 	FileClose($hFileOpen)
 	Return 1
@@ -1000,18 +988,17 @@ Func _PathSplit($sFilePath, ByRef $sDrive, ByRef $sDir, ByRef $sFileName, ByRef 
 	Local $aArray = StringRegExp($sFilePath, "^\h*((?:\\\\\?\\)*(\\\\[^\?\/\\]+|[A-Za-z]:)?(.*[\/\\]\h*)?((?:[^\.\/\\]|(?(?=\.[^\/\\]*\.)\.))*)?([^\/\\]*))$", $STR_REGEXPARRAYMATCH)
 	If @error Then ; This error should never happen.
 		ReDim $aArray[5]
-		$aArray[$PATH_ORIGINAL] = $sFilePath
+		$aArray[0] = $sFilePath
 	EndIf
-	$sDrive = $aArray[$PATH_DRIVE]
-	If StringLeft($aArray[$PATH_DIRECTORY], 1) == "/" Then
-		$sDir = StringRegExpReplace($aArray[$PATH_DIRECTORY], "\h*[\/\\]+\h*", "\/")
+	$sDrive = $aArray[1]
+	If StringLeft($aArray[2], 1) == "/" Then
+		$sDir = StringRegExpReplace($aArray[2], "\h*[\/\\]+\h*", "\/")
 	Else
-		$sDir = StringRegExpReplace($aArray[$PATH_DIRECTORY], "\h*[\/\\]+\h*", "\\")
+		$sDir = StringRegExpReplace($aArray[2], "\h*[\/\\]+\h*", "\\")
 	EndIf
-	$aArray[$PATH_DIRECTORY] = $sDir
-	$sFileName = $aArray[$PATH_FILENAME]
-	$sExtension = $aArray[$PATH_EXTENSION]
-
+	$aArray[2] = $sDir
+	$sFileName = $aArray[3]
+	$sExtension = $aArray[4]
 	Return $aArray
 EndFunc   ;==>_PathSplit
 

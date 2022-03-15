@@ -4,15 +4,13 @@
 #include "GuiStatusBar.au3"
 #include "Memory.au3"
 #include "SendMessage.au3"
-#include "ToolTipConstants.au3" ; For _GUICtrlEdit_ShowBalloonTip()
 #include "UDFGlobalID.au3"
-#include "WinAPIConv.au3"
-#include "WinAPIHObj.au3"
-#include "WinAPISysInternals.au3"
+#include "WinAPI.au3"
+#include "ToolTipConstants.au3" ; for _GUICtrlEdit_ShowBalloonTip()
 
 ; #INDEX# =======================================================================================================================
 ; Title .........: Edit
-; AutoIt Version : 3.3.15.4
+; AutoIt Version : 3.3.14.2
 ; Language ......: English
 ; Description ...: Functions that assist with Edit control management.
 ;                  An edit control is a rectangular control window typically used in a dialog box to permit the user to enter
@@ -20,6 +18,7 @@
 ; ===============================================================================================================================
 
 ; #VARIABLES# ===================================================================================================================
+Global $__g_hEditLastWnd
 
 ; ===============================================================================================================================
 
@@ -170,12 +169,12 @@ EndFunc   ;==>_GUICtrlEdit_CanUndo
 Func _GUICtrlEdit_CharFromPos($hWnd, $iX, $iY)
 	If Not IsHWnd($hWnd) Then $hWnd = GUICtrlGetHandle($hWnd)
 
-	Local $aRet[2]
+	Local $aReturn[2]
 
 	Local $iRet = _SendMessage($hWnd, $EM_CHARFROMPOS, 0, _WinAPI_MakeLong($iX, $iY))
-	$aRet[0] = _WinAPI_LoWord($iRet)
-	$aRet[1] = _WinAPI_HiWord($iRet)
-	Return $aRet
+	$aReturn[0] = _WinAPI_LoWord($iRet)
+	$aReturn[1] = _WinAPI_HiWord($iRet)
+	Return $aReturn
 EndFunc   ;==>_GUICtrlEdit_CharFromPos
 
 ; #FUNCTION# ====================================================================================================================
@@ -217,7 +216,7 @@ Func _GUICtrlEdit_Destroy(ByRef $hWnd)
 
 	Local $iDestroyed = 0
 	If IsHWnd($hWnd) Then
-		If _WinAPI_InProcess($hWnd, $__g_hGUICtrl_LastWnd) Then
+		If _WinAPI_InProcess($hWnd, $__g_hEditLastWnd) Then
 			Local $nCtrlID = _WinAPI_GetDlgCtrlID($hWnd)
 			Local $hParent = _WinAPI_GetParent($hWnd)
 			$iDestroyed = _WinAPI_DestroyWindow($hWnd)
@@ -375,7 +374,7 @@ Func _GUICtrlEdit_GetCueBanner($hWnd)
 
 	Local $tText = DllStructCreate("wchar[4096]")
 	If _SendMessage($hWnd, $EM_GETCUEBANNER, $tText, 4096, 0, "struct*") <> 1 Then Return SetError(-1, 0, "")
-	Return DllStructGetData($tText, 1)
+	Return _WinAPI_WideCharToMultiByte($tText)
 EndFunc   ;==>_GUICtrlEdit_GetCueBanner
 
 ; #INTERNAL_USE_ONLY# ===========================================================================================================
@@ -816,13 +815,9 @@ EndFunc   ;==>_GUICtrlEdit_Scroll
 Func _GUICtrlEdit_SetCueBanner($hWnd, $sText, $bOnFocus = False)
 	If Not IsHWnd($hWnd) Then $hWnd = GUICtrlGetHandle($hWnd)
 
-	If IsString($sText) Then
-		Return _SendMessage($hWnd, $EM_SETCUEBANNER, $bOnFocus, $sText, 0, "wparam", "wstr") = 1
-	Else
-		Local $tText = _WinAPI_MultiByteToWideChar($sText)
+	Local $tText = _WinAPI_MultiByteToWideChar($sText)
 
-		Return _SendMessage($hWnd, $EM_SETCUEBANNER, $bOnFocus, $tText, 0, "wparam", "struct*") = 1
-	EndIf
+	Return _SendMessage($hWnd, $EM_SETCUEBANNER, $bOnFocus, $tText, 0, "wparam", "struct*") = 1
 EndFunc   ;==>_GUICtrlEdit_SetCueBanner
 
 ; #NO_DOC_FUNCTION# =============================================================================================================
@@ -1041,20 +1036,8 @@ EndFunc   ;==>_GUICtrlEdit_SetWordBreakProc
 Func _GUICtrlEdit_ShowBalloonTip($hWnd, $sTitle, $sText, $iIcon)
 	If Not IsHWnd($hWnd) Then $hWnd = GUICtrlGetHandle($hWnd)
 
-	Local $tTitle
-	If IsString($sTitle) Then
-		$tTitle = DllStructCreate("wchar[" & StringLen($sTitle) & "]")
-		DllStructSetData($tTitle, 1, $sTitle)
-	Else
-		$tTitle = _WinAPI_MultiByteToWideChar($sTitle)
-	EndIf
-	Local $tText
-	If IsString($sText) Then
-		$tText = DllStructCreate("wchar[" & StringLen($sText) & "]")
-		DllStructSetData($tText, 1, $sText)
-	Else
-		$tText = _WinAPI_MultiByteToWideChar($sText)
-	EndIf
+	Local $tTitle = _WinAPI_MultiByteToWideChar($sTitle)
+	Local $tText = _WinAPI_MultiByteToWideChar($sText)
 	Local $tTT = DllStructCreate($__tagEDITBALLOONTIP)
 	DllStructSetData($tTT, "Size", DllStructGetSize($tTT))
 	DllStructSetData($tTT, "Title", DllStructGetPtr($tTitle))

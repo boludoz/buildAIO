@@ -4,7 +4,7 @@
 
 ; #INDEX# =======================================================================================================================
 ; Title .........: Process
-; AutoIt Version : 3.3.15.4
+; AutoIt Version : 3.3.14.2
 ; Language ......: English
 ; Description ...: Functions that assist with Process management.
 ; Author(s) .....: Erifash, Wouter, Matthew Tucker, Jeremy Landes, Valik
@@ -22,11 +22,13 @@
 ; ===============================================================================================================================
 Func _ProcessGetName($iPID)
 	Local $aProcessList = ProcessList()
-	For $i = 1 To UBound($aProcessList) - 1
-		If $aProcessList[$i][1] = $iPID Then
-			Return $aProcessList[$i][0]
-		EndIf
-	Next
+	If Not @error Then
+		For $i = 1 To $aProcessList[0][0]
+			If $aProcessList[$i][1] = $iPID Then
+				Return $aProcessList[$i][0]
+			EndIf
+		Next
+	EndIf
 	Return SetError(1, 0, "")
 EndFunc   ;==>_ProcessGetName
 
@@ -87,6 +89,6 @@ EndFunc   ;==>_ProcessGetPriority
 ; Author ........: Jeremy Landes <jlandes at landeserve dot com>
 ; ===============================================================================================================================
 Func _RunDos($sCommand)
-	Local $iResult = RunWait(@ComSpec & " /C " & $sCommand, "", @SW_HIDE)
-	Return SetError(@error, @extended, $iResult)
+	Local $nResult = RunWait(@ComSpec & " /C " & $sCommand, "", @SW_HIDE)
+	Return SetError(@error, @extended, $nResult)
 EndFunc   ;==>_RunDos

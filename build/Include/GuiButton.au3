@@ -1,16 +1,13 @@
 #include-once
 
-#include "APIResConstants.au3"
 #include "ButtonConstants.au3"
 #include "SendMessage.au3"
 #include "UDFGlobalID.au3"
-#include "WinAPIConv.au3"
-#include "WinAPIIcons.au3"
-#include "WinAPISysInternals.au3"
+#include "WinAPI.au3"
 
 ; #INDEX# =======================================================================================================================
 ; Title .........: Button
-; AutoIt Version : 3.3.15.4
+; AutoIt Version : 3.3.14.2
 ; Language ......: English
 ; Description ...: Functions that assist with Button control management.
 ;                  A button is a control the user can click to provide input to an application.
@@ -246,7 +243,7 @@ Func _GUICtrlButton_GetNote($hWnd)
 	Local $tLen = DllStructCreate("dword")
 	DllStructSetData($tLen, 1, $iLen)
 	If Not _SendMessage($hWnd, $BCM_GETNOTE, $tLen, $tNote, 0, "struct*", "struct*") Then Return SetError(-1, 0, "")
-	Return DllStructGetData($tNote, 1)
+	Return _WinAPI_WideCharToMultiByte($tNote)
 EndFunc   ;==>_GUICtrlButton_GetNote
 
 ; #FUNCTION# ====================================================================================================================

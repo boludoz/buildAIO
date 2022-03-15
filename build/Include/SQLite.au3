@@ -3,12 +3,12 @@
 
 #include "FileConstants.au3"
 #include "InetConstants.au3"
-#include "Array.au3" ; Using : _ArrayAdd(), _ArrayDelete(), _ArraySearch()
-#include "File.au3" ; Using : _TempFile()
+#include "Array.au3" ; Using: _ArrayAdd(),_ArrayDelete(),_ArraySearch()
+#include "File.au3" ; Using: _TempFile()
 
 ; #INDEX# =======================================================================================================================
 ; Title .........: SQLite
-; AutoIt Version : 3.3.15.3
+; AutoIt Version : 3.3.15.1
 ; Language ......: English
 ; Description ...: Functions that assist access to an SQLite database.
 ; Author(s) .....: Fida Florian (piccaso), jchd, jpm
@@ -83,7 +83,7 @@ Global Const $SQLITE_TYPE_NULL = 5
 ; _SQLite_Exec
 ; _SQLite_LibVersion
 ; _SQLite_LastInsertRowID
-; _SQLite_GetTable2D
+; _SQLite_GetTable2d
 ; _SQLite_Changes
 ; _SQLite_TotalChanges
 ; _SQLite_ErrCode
@@ -102,7 +102,6 @@ Global Const $SQLITE_TYPE_NULL = 5
 ; _SQLite_Escape
 ; _SQLite_FastEncode
 ; _SQLite_FastEscape
-; _SQLite_GetTableData2D
 ; ===============================================================================================================================
 
 ; #INTERNAL_USE_ONLY# ===========================================================================================================
@@ -117,8 +116,9 @@ Global Const $SQLITE_TYPE_NULL = 5
 ; __SQLite_StringToUtf8Struct
 ; __SQLite_Utf8StructToString
 ; __SQLite_ConsoleWrite
+;~ ; __SQLite_Download_SQLite3File
+;~ ; __SQLite_Download_Confirmation
 ; __SQLite_Print
-; __SQLite_GetDownloadedPath
 ; ===============================================================================================================================
 
 #comments-start
@@ -133,7 +133,7 @@ Global Const $SQLITE_TYPE_NULL = 5
 	28.11.05	Added Function Headers
 	28.11.05	Fixed Bug in _SQLite_Exec(), $sErrorMsg was set to 0 instead of 'Successful result'
 	29.11.05	Changed _SQLite_Display2DResult(), Better Formating for Larger Tables & Ability to Return the Result
-	30.11.05	Changed _SQLite_GetTable2D(), Ability to Switch Dimensions
+	30.11.05	Changed _SQLite_GetTable2d(), Ability to Switch Dimensions
 	30.11.05	Fixed _SQLite_Display2DResult() $iCellWidth was ignored
 	03.12.05	Added _SQLite_QuerySingleRow()
 	04.12.05	Changed Standard $hDB Handling (Thank you jpm)
@@ -146,7 +146,7 @@ Global Const $SQLITE_TYPE_NULL = 5
 	29.03.06	Added _SQLite_SetTimeout()
 	17.05.06	:cdecl to support autoit debugging version
 	18.05.06	_SQLite_SQLiteExe() now Creates nonexistent Directories
-	18.05.06	Fixed SyntaxCheck Warnings (_SQLite_GetTable2D())
+	18.05.06	Fixed SyntaxCheck Warnings (_SQLite_GetTable2d())
 	21.05.06	Added support for Default Keyword for all Optional parameters
 	25.05.06	Added _SQLite_Encode()
 	25.05.06	Changed _SQLite_QueryNoResult() -> _SQLite_Execute()
@@ -155,7 +155,7 @@ Global Const $SQLITE_TYPE_NULL = 5
 	26.05.06	Changed @error Values & Improved error catching (see Function headers)
 	31.05.06	jpm's Nice @error values setting
 	04.06.06	Inline SQLite3.dll
-	08.06.06	Changed _SQLite_Exec(), _SQLite_GetTable2D(), _SQLite_GetTable() Removed '$sErrorMsg' parameter
+	08.06.06	Changed _SQLite_Exec(), _SQLite_GetTable2d(), _SQLite_GetTable() Removed '$sErrorMsg' parameter
 	08.06.06	Removed _SQLite_Execute() because _SQLite_Exec() was the same
 	08.06.06	Cleaning _SQLite_Startup(). (jpm)
 	23.09.06	Fixed _SQLite_Exec() Memory Leak on SQL error
@@ -173,14 +173,14 @@ Global Const $SQLITE_TYPE_NULL = 5
 	23.06.08	Fixed _SQLite_* misuse if _SQLite_Startup() failed
 	23.01.09	Fixed memory leak on error -> __SQLite_szFree() internal function
 	01.05.09	Changed _SQLite_*() functions dealing with AutoIt Strings (Unicode string) for queries and results, without ANSI conversion.
-				Note: no point for a Unicode version of _SQLite_SQLiteExe() since the DOS console doesn't handle Unicode. (jchd)
+	Note: no point for a Unicode version of _SQLite_SQLiteExe() since the DOS console doesn't handle Unicode. (jchd)
 	02.05.09	Added _SQLite_Open() accepts a second parameter for read/write/create access mode. (jchd)
 	04.05.09	Added _SQLite_Open() accepts a third parameter for UTF8/UTF16 encoding mode (Only use at creation time). (jpm)
-				Warn: _SQLite_Open() is using now Filename that are Unicode as SQLite expects. Previous version was sending only Filenames with
-					ASCII characters so previously script can have create valid ASCII filenames no more unreachable.
+	Warn: _SQLite_Open() is using now Filename that are Unicode as SQLite expects. Previous version was sending only Filenames with
+	ASCII characters so previously script can have create valid ASCII filenames no more unreachable.
 	25.05.09	_SQLite_Startup extra parameter to force UTF8 char on SciTE console with output.code.page=65001.
 	09.06.09	_SQLite_SaveMode renamed to _SQLite_SafeMode().
-	01.06.10	jchd updates ... _SQLite_FetchData, $iCharSize, _SQLite_QuerySingleRow, _SQLite_GetTable2D, _SQLite_Display2DResult.
+	01.06.10	jchd updates ... _SQLite_FetchData, $iCharSize, _SQLite_QuerySingleRow, _SQLite_GetTable2d, _SQLite_Display2DResult.
 	04.04.10	jchd Fixed _SQLite_Escape
 	05.04.10	jchd Added _SQLite_FastEscape & _SQLite_FastEncode.
 	06.04.10	jchd Updated _SQLite_GetTable.. optimization
@@ -196,8 +196,6 @@ Global Const $SQLITE_TYPE_NULL = 5
 	05.04.14	Added __SQLite_Download_SQLite3File() download sqlite3.exe or sqlite3.dll if needed.
 	08.04.14	Fixed __SQLite_Download_SQLite3File() when running in Admin mode.
 	11.09.15	Fixed _SQLite_Startup() No Download, search dll in @LocalAppDataDir & "\AutoIt v3\SQLite" if needed.
-	17.02.18	Fixed _SQLite_Startup(), _SQLite_SQLiteExe() search dll in @LocalAppDataDir & "\AutoIt v3\SQLite" if needed.
-	14.03.18	Added _SQLite_GetTableData2D() simplified version of _SQLite_GetTable2D() retrieving only data.
 #comments-end
 
 ; #FUNCTION# ====================================================================================================================
@@ -217,22 +215,61 @@ Func _SQLite_Startup($sDll_Filename = "", $bUTF8ErrorMsg = False, $iForceLocal =
 	If $bUTF8ErrorMsg = Default Then $bUTF8ErrorMsg = False
 	$__g_bUTF8ErrorMsg_SQLite = $bUTF8ErrorMsg
 
+	Local $sDll_Dirname = ""
 	If $sDll_Filename = "" Then $sDll_Filename = "sqlite3.dll"
 	If @AutoItX64 And (StringInStr($sDll_Filename, "_x64") = 0) Then $sDll_Filename = StringReplace($sDll_Filename, ".dll", "_x64.dll")
 
-	Local $iExtended = 0
+	Local $iExt = 0
 	If $iForceLocal < 1 Then
-		$sDll_Filename = __SQLite_GetDownloadedPath($sDll_Filename) & $sDll_Filename
-		$iExtended = @extended
+		Local $bDownloadDLL = True
+		Local $vInlineVersion = null ;Call('__SQLite_Inline_Version')
+		If @error Then $bDownloadDLL = False ; no valid SQLite version define so invalidate download
+
+		If $iForceLocal = 0 Then
+			; check SQLite version if local file exists
+			If __SQLite_VersCmp(@ScriptDir & "\" & $sDll_Filename, $vInlineVersion) = $SQLITE_OK Then
+				$sDll_Dirname = @ScriptDir & "\"
+				$bDownloadDLL = False
+			ElseIf __SQLite_VersCmp(@SystemDir & "\" & $sDll_Filename, $vInlineVersion) = $SQLITE_OK Then
+				$sDll_Dirname = @SystemDir & "\"
+				$bDownloadDLL = False
+			ElseIf __SQLite_VersCmp(@WindowsDir & "\" & $sDll_Filename, $vInlineVersion) = $SQLITE_OK Then
+				$sDll_Dirname = @WindowsDir & "\"
+				$bDownloadDLL = False
+			ElseIf __SQLite_VersCmp(@WorkingDir & "\" & $sDll_Filename, $vInlineVersion) = $SQLITE_OK Then
+				$sDll_Dirname = @WorkingDir & "\"
+				$bDownloadDLL = False
+			EndIf
+		EndIf
+
+		If $bDownloadDLL Then
+			If Not FileExists($sDll_Dirname & $sDll_Filename) Then
+				; Create in @LocalAppDataDir & "\AutoIt v3\" to avoid reloading (only valid for the current user)
+				$sDll_Dirname = @LocalAppDataDir & "\AutoIt v3\SQLite"
+			EndIf
+			If $iForceLocal Then
+				; download the latest version. Usely related with internal testing.
+				$vInlineVersion = ""
+			Else
+				; download the version related with the include version
+				$vInlineVersion = "_" & $vInlineVersion
+				$iExt = 1
+			EndIf
+			$sDll_Filename = $sDll_Dirname & "\" & StringReplace($sDll_Filename, ".dll", "") &  $vInlineVersion &  ".dll"
+;~ 			$sDll_Filename = __SQLite_Download_SQLite3File($sDll_Dirname, StringReplace($sDll_Filename, ".dll", ""), $vInlineVersion, ".dll")
+;~ 			If @error Then Return SetError(@error, @extended, "") ; download not successful
+;~ 			$iExt = @extended
+		EndIf
 	EndIf
+;~ 	If Not FileExists($sDll_Filename) Then Then Return SetError(2, 0, "") ; File not found
 
 	Local $hDll = DllOpen($sDll_Filename)
 	If $hDll = -1 Then
 		$__g_hDll_SQLite = 0
-		Return SetError(1, $iExtended, "")
+		Return SetError(1, $iExt, "")
 	Else
 		$__g_hDll_SQLite = $hDll
-		Return SetExtended($iExtended, $sDll_Filename)
+		Return SetExtended($iExt, $sDll_Filename)
 	EndIf
 EndFunc   ;==>_SQLite_Startup
 
@@ -288,7 +325,7 @@ Func _SQLite_GetTable($hDB, $sSQL, ByRef $aResult, ByRef $iRows, ByRef $iColumns
 	$aResult = ''
 	If __SQLite_hChk($hDB, 1) Then Return SetError(@error, 0, $SQLITE_MISUSE)
 	If $iCharSize = "" Or $iCharSize < 1 Or $iCharSize = Default Then $iCharSize = -1
-	; see comments in _SQLite_GetTable2D
+	; see comments in _SQLite_GetTable2d
 	Local $hQuery
 	Local $r = _SQLite_Query($hDB, $sSQL, $hQuery)
 	If @error Then Return SetError(2, @error, $r)
@@ -349,8 +386,8 @@ Func _SQLite_Exec($hDB, $sSQL, $sCallBack = "")
 	If __SQLite_hChk($hDB, 2) Then Return SetError(@error, 0, $SQLITE_MISUSE)
 	If $sCallBack <> "" Then
 		Local $iRows, $iColumns
-		Local $sResult = "SQLITE_CALLBACK:" & $sCallBack
-		Local $iRval = _SQLite_GetTable2D($hDB, $sSQL, $sResult, $iRows, $iColumns)
+		Local $aResult = "SQLITE_CALLBACK:" & $sCallBack
+		Local $iRval = _SQLite_GetTable2d($hDB, $sSQL, $aResult, $iRows, $iColumns)
 		If @error Then Return SetError(3, @error, $iRval)
 		Return $iRval
 	EndIf
@@ -477,7 +514,7 @@ EndFunc   ;==>_SQLite_Display2DResult
 ; Author ........: piccaso (Fida Florian), blink314
 ; Modified.......: jchd
 ; ===============================================================================================================================
-Func _SQLite_GetTable2D($hDB, $sSQL, ByRef $aResult, ByRef $iRows, ByRef $iColumns, $iCharSize = -1, $bSwichDimensions = False)
+Func _SQLite_GetTable2d($hDB, $sSQL, ByRef $aResult, ByRef $iRows, ByRef $iColumns, $iCharSize = -1, $bSwichDimensions = False)
 	If __SQLite_hChk($hDB, 1) Then Return SetError(@error, 0, $SQLITE_MISUSE)
 	If $iCharSize = "" Or $iCharSize < 1 Or $iCharSize = Default Then $iCharSize = -1
 	Local $sCallBack = "", $bCallBack = False
@@ -493,27 +530,27 @@ Func _SQLite_GetTable2D($hDB, $sSQL, ByRef $aResult, ByRef $iRows, ByRef $iColum
 	Local $r = _SQLite_Query($hDB, $sSQL, $hQuery)
 	If @error Then Return SetError(2, @error, $r)
 	If $r <> $SQLITE_OK Then
-		__SQLite_ReportError($hDB, "_SQLite_GetTable2D", $sSQL)
+		__SQLite_ReportError($hDB, "_SQLite_GetTable2d", $sSQL)
 		_SQLite_QueryFinalize($hQuery)
 		Return SetError(-1, 0, $r)
 	EndIf
 	$iRows = 0
-	Local $aRval_Step, $iError
+	Local $iRval_Step, $iError
 	While True
-		$aRval_Step = DllCall($__g_hDll_SQLite, "int:cdecl", "sqlite3_step", "ptr", $hQuery)
+		$iRval_Step = DllCall($__g_hDll_SQLite, "int:cdecl", "sqlite3_step", "ptr", $hQuery)
 		If @error Then
 			$iError = @error
 			_SQLite_QueryFinalize($hQuery)
 			Return SetError(3, $iError, $SQLITE_MISUSE) ; DllCall error
 		EndIf
-		Switch $aRval_Step[0]
+		Switch $iRval_Step[0]
 			Case $SQLITE_ROW
 				$iRows += 1
 			Case $SQLITE_DONE
 				ExitLoop
 			Case Else
 				_SQLite_QueryFinalize($hQuery)
-				Return SetError(3, $iError, $aRval_Step[0])
+				Return SetError(3, $iError, $iRval_Step[0])
 		EndSwitch
 	WEnd
 	Local $iRet = _SQLite_QueryReset($hQuery)
@@ -554,7 +591,9 @@ Func _SQLite_GetTable2D($hDB, $sSQL, ByRef $aResult, ByRef $iRows, ByRef $iColum
 		EndIf
 	Else
 		Local $iCbRval
-		$iCbRval = Execute($sCallBack & "($aDataRow)")
+		#Au3Stripper_Off
+		$iCbRval = Call($sCallBack, $aDataRow)
+		#Au3Stripper_On
 		If $iCbRval = $SQLITE_ABORT Or $iCbRval = $SQLITE_INTERRUPT Or @error Then
 			$iError = @error
 			_SQLite_QueryFinalize($hQuery)
@@ -570,7 +609,9 @@ Func _SQLite_GetTable2D($hDB, $sSQL, ByRef $aResult, ByRef $iRows, ByRef $iColum
 				Return SetError(6, $iError, $r)
 			EndIf
 			If $bCallBack Then
-				$iCbRval = Execute($sCallBack & "($aDataRow)")
+				#Au3Stripper_Off
+				$iCbRval = Call($sCallBack, $aDataRow)
+				#Au3Stripper_On
 				If $iCbRval = $SQLITE_ABORT Or $iCbRval = $SQLITE_INTERRUPT Or @error Then
 					$iError = @error
 					_SQLite_QueryFinalize($hQuery)
@@ -591,7 +632,7 @@ Func _SQLite_GetTable2D($hDB, $sSQL, ByRef $aResult, ByRef $iRows, ByRef $iColum
 		Next
 	EndIf
 	Return (_SQLite_QueryFinalize($hQuery))
-EndFunc   ;==>_SQLite_GetTable2D
+EndFunc   ;==>_SQLite_GetTable2d
 
 ; #FUNCTION# ====================================================================================================================
 ; Author ........: piccaso (Fida Florian)
@@ -636,13 +677,13 @@ Func _SQLite_FetchData($hQuery, ByRef $aRow, $bBinary = False, $bDoNotFinalize =
 	If __SQLite_hChk($hQuery, 7, False) Then Return SetError(@error, 0, $SQLITE_MISUSE)
 	If $bBinary = Default Then $bBinary = False
 	If $bDoNotFinalize = Default Then $bDoNotFinalize = False
-	Local $aRval_Step = DllCall($__g_hDll_SQLite, "int:cdecl", "sqlite3_step", "ptr", $hQuery)
+	Local $iRval_Step = DllCall($__g_hDll_SQLite, "int:cdecl", "sqlite3_step", "ptr", $hQuery)
 	If @error Then Return SetError(1, @error, $SQLITE_MISUSE) ; DllCall error
-	If $aRval_Step[0] <> $SQLITE_ROW Then
-		If $bDoNotFinalize = False And $aRval_Step[0] = $SQLITE_DONE Then
+	If $iRval_Step[0] <> $SQLITE_ROW Then
+		If $bDoNotFinalize = False And $iRval_Step[0] = $SQLITE_DONE Then
 			_SQLite_QueryFinalize($hQuery)
 		EndIf
-		Return SetError(-1, 0, $aRval_Step[0])
+		Return SetError(-1, 0, $iRval_Step[0])
 	EndIf
 	If Not $iColumns Then
 		Local $iRval_ColCnt = DllCall($__g_hDll_SQLite, "int:cdecl", "sqlite3_data_count", "ptr", $hQuery)
@@ -663,11 +704,11 @@ Func _SQLite_FetchData($hQuery, ByRef $aRow, $bBinary = False, $bDoNotFinalize =
 			If @error Then Return SetError(3, @error, $SQLITE_MISUSE) ; DllCall error
 			$aRow[$i] = $sRval[0]
 		Else
-			Local $aCall = DllCall($__g_hDll_SQLite, "ptr:cdecl", "sqlite3_column_blob", "ptr", $hQuery, "int", $i)
+			Local $vResult = DllCall($__g_hDll_SQLite, "ptr:cdecl", "sqlite3_column_blob", "ptr", $hQuery, "int", $i)
 			If @error Then Return SetError(6, @error, $SQLITE_MISUSE) ; DllCall error
 			Local $iColBytes = DllCall($__g_hDll_SQLite, "int:cdecl", "sqlite3_column_bytes", "ptr", $hQuery, "int", $i)
 			If @error Then Return SetError(5, @error, $SQLITE_MISUSE) ; DllCall error
-			Local $tResultStruct = DllStructCreate("byte[" & $iColBytes[0] & "]", $aCall[0])
+			Local $tResultStruct = DllStructCreate("byte[" & $iColBytes[0] & "]", $vResult[0])
 			$aRow[$i] = Binary(DllStructGetData($tResultStruct, 1))
 		EndIf
 	Next
@@ -774,8 +815,15 @@ EndFunc   ;==>_SQLite_QuerySingleRow
 Func _SQLite_SQLiteExe($sDatabaseFile, $sInput, ByRef $sOutput, $sSQLiteExeFilename = "sqlite3.exe", $bDebug = False)
 	If $sSQLiteExeFilename = -1 Or $sSQLiteExeFilename = Default Then
 		$sSQLiteExeFilename = "sqlite3.exe"
-		$sSQLiteExeFilename = __SQLite_GetDownloadedPath($sSQLiteExeFilename) & $sSQLiteExeFilename
-		If Not FileExists($sSQLiteExeFilename) Then Return SetError(2, 0, $SQLITE_MISUSE) ; Can't Found sqlite3.exe
+		If Not FileExists($sSQLiteExeFilename) Then
+			Local $sInlineVersion = "_" & ""; Call('__SQLite_Inline_Version')
+			If @error Then $sInlineVersion = "" ; no valid SQLite version define so use any version
+			$sSQLiteExeFilename = StringReplace($sSQLiteExeFilename, ".exe", "") & $sInlineVersion & ".exe"
+			If Not FileExists($sSQLiteExeFilename) Then Return SetError(2, 0, $SQLITE_MISUSE) ; Can't Found sqlite3.exe
+;~ 			$sSQLiteExeFilename = __SQLite_Download_SQLite3File($sSQLiteExe_FilePath, "sqlite3", $sInlineVersion, ".exe")
+;~ 			If @error Then Return SetError(2, 0, $SQLITE_MISUSE) ; Can't Found sqlite3.exe
+;~ 			If StringInStr($sSQLiteExeFilename, "\") = 0 Then $sSQLiteExeFilename = $sSQLiteExe_FilePath & $sSQLiteExeFilename
+		EndIf
 	EndIf
 	If Not FileExists($sDatabaseFile) Then
 		Local $hNewFile = FileOpen($sDatabaseFile, $FO_OVERWRITE + $FO_CREATEPATH)
@@ -804,7 +852,7 @@ Func _SQLite_SQLiteExe($sDatabaseFile, $sInput, ByRef $sOutput, $sSQLiteExeFilen
 			$iRval = $SQLITE_MISUSE ; SQLite.exe not found
 		Else
 			$sOutput = FileRead($sOutputFile, FileGetSize($sOutputFile))
-			If StringInStr($sOutput, "SQL error:", $STR_CASESENSE) > 0 Or StringInStr($sOutput, "Incomplete SQL:", $STR_CASESENSE) > 0 Then $iRval = $SQLITE_ERROR ; SQL error / Incomplete SQL
+			If StringInStr($sOutput, "SQL error:", 1) > 0 Or StringInStr($sOutput, "Incomplete SQL:", 1) > 0 Then $iRval = $SQLITE_ERROR ; SQL error / Incomplete SQL
 		EndIf
 	Else
 		$iRval = $SQLITE_CANTOPEN ; Can't open Input File
@@ -865,8 +913,8 @@ EndFunc   ;==>_SQLite_Escape
 ; Author ........: jchd
 ; ===============================================================================================================================
 Func _SQLite_FastEncode($vData)
-	If Not IsBinary($vData) Then $vData = Binary($vData)
-	Return "X'" & StringTrimLeft($vData, 2) & "'"
+	If Not IsBinary($vData) Then Return SetError(1, 0, "")
+	Return "X'" & Hex($vData) & "'"
 EndFunc   ;==>_SQLite_FastEncode
 
 ; #FUNCTION# ====================================================================================================================
@@ -877,50 +925,6 @@ Func _SQLite_FastEscape($sString)
 	If Not IsString($sString) Then Return SetError(1, 0, "")
 	Return ("'" & StringReplace($sString, "'", "''", 0, $STR_CASESENSE) & "'")
 EndFunc   ;==>_SQLite_FastEscape
-
-; #FUNCTION# ====================================================================================================================
-; Author ........: jchd
-; Modified.......: jpm
-; ===============================================================================================================================
-Func _SQLite_GetTableData2D($hDB, $sSQL, ByRef $aResult, ByRef $iRows, ByRef $aNames)
-	If __SQLite_hChk($hDB, 1) Then Return SetError(@error, 0, $SQLITE_MISUSE)
-	$aResult = ""
-	Local $hQuery
-	Local $r = _SQLite_Query($hDB, $sSQL, $hQuery)
-	If @error Then Return SetError(2, @error, $r)
-	If $r <> $SQLITE_OK Then
-		__SQLite_ReportError($hDB, "_SQLite_GetTableData", $sSQL)
-		Return SetError(-1, 0, $r)
-	EndIf
-	Local $aDataRow
-	$r = _SQLite_FetchNames($hQuery, $aNames)
-	If @error Then
-		Local $iError = @error
-		_SQLite_QueryFinalize($hQuery)
-		Return SetError(5, $iError, $r)
-	EndIf
-	Local $iColumns = UBound($aNames)
-	Local Const $iChunk = 8192
-	Local $nMaxRow = $iChunk
-	Dim $aResult[$nMaxRow][$iColumns]
-	$iRows = 0
-	While _SQLite_FetchData($hQuery, $aDataRow) = $SQLITE_OK
-		If $iRows = $nMaxRow Then
-			$nMaxRow += $iChunk
-			ReDim $aResult[$nMaxRow][$iColumns]
-		EndIf
-		For $j = 0 To $iColumns - 1
-			$aResult[$iRows][$j] = $aDataRow[$j]
-		Next
-		$iRows += 1
-	WEnd
-	If $iRows = 0 Then
-		$aResult = ""
-	Else
-		ReDim $aResult[$iRows][$iColumns]
-	EndIf
-	Return $SQLITE_OK
-EndFunc   ;==>_SQLite_GetTableData2D
 
 #Region		SQLite.au3 Internal Functions
 ; #INTERNAL_USE_ONLY# ===========================================================================================================
@@ -1027,12 +1031,12 @@ EndFunc   ;==>__SQLite_szFree
 ; Modified.......: jpm
 ; ===============================================================================================================================
 Func __SQLite_StringToUtf8Struct($sString)
-	Local $aCall = DllCall("kernel32.dll", "int", "WideCharToMultiByte", "uint", 65001, "dword", 0, "wstr", $sString, "int", -1, _
+	Local $aResult = DllCall("kernel32.dll", "int", "WideCharToMultiByte", "uint", 65001, "dword", 0, "wstr", $sString, "int", -1, _
 			"ptr", 0, "int", 0, "ptr", 0, "ptr", 0)
 	If @error Then Return SetError(1, @error, "") ; DllCall error
-	Local $tText = DllStructCreate("char[" & $aCall[0] & "]")
-	$aCall = DllCall("kernel32.dll", "int", "WideCharToMultiByte", "uint", 65001, "dword", 0, "wstr", $sString, "int", -1, _
-			"struct*", $tText, "int", $aCall[0], "ptr", 0, "ptr", 0)
+	Local $tText = DllStructCreate("char[" & $aResult[0] & "]")
+	$aResult = DllCall("kernel32.dll", "int", "WideCharToMultiByte", "uint", 65001, "dword", 0, "wstr", $sString, "int", -1, _
+			"struct*", $tText, "int", $aResult[0], "ptr", 0, "ptr", 0)
 	If @error Then Return SetError(2, @error, "") ; DllCall error
 	Return $tText
 EndFunc   ;==>__SQLite_StringToUtf8Struct
@@ -1048,12 +1052,12 @@ EndFunc   ;==>__SQLite_StringToUtf8Struct
 ; Modified.......: jpm
 ; ===============================================================================================================================
 Func __SQLite_Utf8StructToString($tText)
-	Local $aCall = DllCall("kernel32.dll", "int", "MultiByteToWideChar", "uint", 65001, "dword", 0, "struct*", $tText, "int", -1, _
+	Local $aResult = DllCall("kernel32.dll", "int", "MultiByteToWideChar", "uint", 65001, "dword", 0, "struct*", $tText, "int", -1, _
 			"ptr", 0, "int", 0)
 	If @error Then Return SetError(1, @error, "") ; DllCall error
-	Local $tWstr = DllStructCreate("wchar[" & $aCall[0] & "]")
-	$aCall = DllCall("kernel32.dll", "int", "MultiByteToWideChar", "uint", 65001, "dword", 0, "struct*", $tText, "int", -1, _
-			"struct*", $tWstr, "int", $aCall[0])
+	Local $tWstr = DllStructCreate("wchar[" & $aResult[0] & "]")
+	$aResult = DllCall("kernel32.dll", "int", "MultiByteToWideChar", "uint", 65001, "dword", 0, "struct*", $tText, "int", -1, _
+			"struct*", $tWstr, "int", $aResult[0])
 	If @error Then Return SetError(2, @error, "") ; DllCall error
 	Return DllStructGetData($tWstr, 1)
 EndFunc   ;==>__SQLite_Utf8StructToString
@@ -1070,6 +1074,34 @@ EndFunc   ;==>__SQLite_Utf8StructToString
 Func __SQLite_ConsoleWrite($sText)
 	ConsoleWrite($sText)
 EndFunc   ;==>__SQLite_ConsoleWrite
+
+;~ Func __SQLite_Download_SQLite3File(ByRef $sFilePath, $sFileName, $sVersion, $sFileExt, $iScripLineNumber = @ScriptLineNumber)
+;~ 	Local $sRetFile = $sFileName & $sVersion & $sFileExt
+;~ 	Local $sTempfile = $sFilePath & $sRetFile
+;~ 	If FileExists($sTempfile) Then Return $sTempfile
+
+;~ 	If Not __SQLite_Download_Confirmation("Sqlite File Download") Then Return SetError(-1, 0, "")
+
+;~ 	If Not FileExists($sFilePath) Then DirCreate($sFilePath)
+
+;~ 	Local $sURL = "http://www.autoitscript.com/autoit3/files/beta/autoit/archive/sqlite.new/"
+;~ 	Local $iInetRet = InetGet($sURL & $sRetFile, $sTempfile, $INET_FORCERELOAD)
+;~ 	Local $iError = @error
+;~ 	If $iError Then __SQLite_Print('@@ Debug(' & $iScripLineNumber & ') : __SQLite_Download_SQLite3File : $URL = ' & $sURL & $sFileName & $sFileExt & @CRLF & @TAB & '$sTempfile = ' & $sTempfile & @CRLF & '>Error: ' & $iError & @CRLF)
+
+;~ 	Local $sModifiedTime = Call('__SQLite_Inline_Modified')
+;~ 	If Not @error Then FileSetTime($sTempfile, $sModifiedTime, 0) ; update filetime if defined
+
+;~ 	Return SetError($iError, $iInetRet, $sRetFile)
+;~ EndFunc   ;==>__SQLite_Download_SQLite3File
+
+;~ Func __SQLite_Download_Confirmation($sTitle)
+;~ 	Local $sTemp =  _TempFile(@TempDir, "", "")
+;~ 	Local $aArray = StringRegExp($sTemp, "^\h*((?:\\\\\?\\)*(\\\\[^\?\/\\]+|[A-Za-z]:)?(.*[\/\\]\h*)?((?:[^\.\/\\]|(?(?=\.[^\/\\]*\.)\.))*)?([^\/\\]*))$", $STR_REGEXPARRAYMATCH)
+;~ 	Local $s = InputBox($sTitle, "Please confirm by typing :" & @lf & @lf & "   " & $aArray[3] & @lf & @lf & "It will be dowloaded only on first use")
+;~ 	If $s == $aArray[3] Then Return True
+;~ 	Return False
+;~ EndFunc   ;==>__SQLite_Download_Confirmation
 
 ; #INTERNAL_USE_ONLY# ===========================================================================================================
 ; Name...........: __SQLite_Print
@@ -1091,76 +1123,5 @@ Func __SQLite_Print($sText)
 		EndIf
 	EndIf
 EndFunc   ;==>__SQLite_Print
-
-; #INTERNAL_USE_ONLY# ===========================================================================================================
-; Name...........: __SQLite_GetDownloadedPath
-; Description ...: Returns Path where SQLite DLL's can be found
-; Syntax.........: __SQLite_GetDownloadedPath ( ByRef $sDll_Filename, $vInlineVersion = "" )
-; Parameters ....: $sDll_Filename - .dll or .exe
-;                  $vInlineVersion - to avoid __SQLite_Inline_Version usage (x.y.z.v)
-; Return values .: Path found
-; Author ........: Jpm
-; ===============================================================================================================================
-Func __SQLite_GetDownloadedPath(ByRef $sDll_Filename, $vInlineVersion = "")
-	Local $bDownloadDLL = True, $iExtended = 0
-	If $vInlineVersion = "" Then
-		$vInlineVersion = Execute('__SQLite_Inline_Version()')
-		If @error Then $bDownloadDLL = False ; no valid SQLite version define so invalidate usage
-	Else
-		Local $aVersion = StringSplit($vInlineVersion, ".")
-		If @error = 0 Then
-			Local $iMaintVersion = 0
-			If $aVersion[0] = 4 Then $iMaintVersion = $aVersion[4]
-			$vInlineVersion = (($aVersion[1] * 1000 + $aVersion[2]) * 1000 + $aVersion[3]) * 100 + $iMaintVersion
-		EndIf
-	EndIf
-
-	Local $sDll_DirPath = "", $sLocalPath = @LocalAppDataDir & "\AutoIt v3\SQLite\"
-	; check SQLite version if local file exists
-	If __SQLite_VersCmp(@ScriptDir & "\" & $sDll_Filename, $vInlineVersion) = $SQLITE_OK Then
-		$sDll_DirPath = @ScriptDir & "\"
-		$bDownloadDLL = False
-	ElseIf __SQLite_VersCmp(@WorkingDir & "\" & $sDll_Filename, $vInlineVersion) = $SQLITE_OK Then
-		$sDll_DirPath = @WorkingDir & "\"
-		$bDownloadDLL = False
-	ElseIf __SQLite_VersCmp($sLocalPath & $sDll_Filename, $vInlineVersion) = $SQLITE_OK Then
-		$sDll_DirPath = $sLocalPath
-		$bDownloadDLL = False
-	ElseIf __SQLite_VersCmp(@SystemDir & "\" & $sDll_Filename, $vInlineVersion) = $SQLITE_OK Then
-		$sDll_DirPath = @SystemDir & "\"
-		$bDownloadDLL = False
-	ElseIf __SQLite_VersCmp(@WindowsDir & "\" & $sDll_Filename, $vInlineVersion) = $SQLITE_OK Then
-		$sDll_DirPath = @WindowsDir & "\"
-		$bDownloadDLL = False
-	ElseIf $bDownloadDLL Then
-		Local $sExt = StringRight($sDll_Filename, 4)
-		Local $sDll_Filename_Ver = StringReplace($sDll_Filename, $sExt, "") & "_" & $vInlineVersion & $sExt
-		If __SQLite_VersCmp(@ScriptDir & "\" & $sDll_Filename_Ver, $vInlineVersion) = $SQLITE_OK Then
-			$sDll_DirPath = @ScriptDir & "\"
-			$bDownloadDLL = False
-		ElseIf __SQLite_VersCmp(@WorkingDir & "\" & $sDll_Filename_Ver, $vInlineVersion) = $SQLITE_OK Then
-			$sDll_DirPath = @WorkingDir & "\"
-			$bDownloadDLL = False
-		ElseIf __SQLite_VersCmp($sLocalPath & $sDll_Filename_Ver, $vInlineVersion) = $SQLITE_OK Then
-			$sDll_DirPath = $sLocalPath
-			$bDownloadDLL = False
-		ElseIf __SQLite_VersCmp(@SystemDir & "\" & $sDll_Filename_Ver, $vInlineVersion) = $SQLITE_OK Then
-			$sDll_DirPath = @SystemDir & "\"
-			$bDownloadDLL = False
-		ElseIf __SQLite_VersCmp(@WindowsDir & "\" & $sDll_Filename_Ver, $vInlineVersion) = $SQLITE_OK Then
-			$sDll_DirPath = @WindowsDir & "\"
-			$bDownloadDLL = False
-		EndIf
-		If Not $bDownloadDLL Then
-			$iExtended = 1
-		Else
-			; does not exist so try
-			$sDll_DirPath = $sLocalPath
-		EndIf
-		$sDll_Filename = $sDll_Filename_Ver
-	EndIf
-
-	Return SetExtended($iExtended, $sDll_DirPath)
-EndFunc   ;==>__SQLite_GetDownloadedPath
 
 #EndRegion		SQLite.au3 Internal Functions

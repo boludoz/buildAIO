@@ -4,7 +4,7 @@
 
 ; #INDEX# =======================================================================================================================
 ; Title .........: String
-; AutoIt Version : 3.3.15.4
+; AutoIt Version : 3.3.14.2
 ; Description ...: Functions that assist with String management.
 ; Author(s) .....: Jarvis Stubblefield, SmOke_N, Valik, Wes Wolfe-Wolvereness, WeaponX, Louis Horvath, JdeB, Jeremy Landes, Jon, jchd, BrewManNH, guinness
 ; ===============================================================================================================================
@@ -54,9 +54,9 @@ Func _StringBetween($sString, $sStart, $sEnd, $iMode = $STR_ENDISSTART, $bCase =
 		$bCase = False
 	EndIf
 
-	Local $aRet = StringRegExp($sString, "(?s" & (Not $bCase ? "i" : "") & ")" & $sStart & "(.*?)" & $sEnd, $STR_REGEXPARRAYGLOBALMATCH)
+	Local $aReturn = StringRegExp($sString, "(?s" & (Not $bCase ? "i" : "") & ")" & $sStart & "(.*?)" & $sEnd, $STR_REGEXPARRAYGLOBALMATCH)
 	If @error Then Return SetError(1, 0, 0)
-	Return $aRet
+	Return $aReturn
 EndFunc   ;==>_StringBetween
 
 ; #FUNCTION# ====================================================================================================================
@@ -75,20 +75,21 @@ Func _StringExplode($sString, $sDelimiter, $iLimit = 0)
 		$sDelimiter = $NULL
 	ElseIf $iLimit < 0 Then
 		; Find delimiter occurence from right-to-left
-		Local $iIndex = StringInStr($sString, $sDelimiter, $STR_NOCASESENSEBASIC, $iLimit)
+		Local $iIndex = StringInStr($sString, $sDelimiter, 0, $iLimit)
 		If $iIndex Then
 			; Split on left side of string only
 			$sString = StringLeft($sString, $iIndex - 1)
 		EndIf
 	EndIf
-	Return StringSplit($sString, $sDelimiter, BitOR($STR_ENTIRESPLIT, $STR_NOCOUNT))
+
+	Return StringSplit($sString, $sDelimiter, $STR_ENTIRESPLIT + $STR_NOCOUNT)
 EndFunc   ;==>_StringExplode
 
 ; #FUNCTION# ====================================================================================================================
 ; Author ........: Louis Horvath <celeri at videotron dot ca>
 ; Modified.......: jchd - Removed explicitly checking if the source and insert strings were strings and forcing an @error return value, czardas - re-write for optimization
 ; ===============================================================================================================================
-Func _StringInsert($sString, $sInsertion, $iPosition)
+Func _StringInsert($sString, $sInsertString, $iPosition)
 	; Retrieve the length of the source string
 	Local $iLength = StringLen($sString)
 	; Casting Int() takes care of String/Int, Numbers
@@ -98,7 +99,7 @@ Func _StringInsert($sString, $sInsertion, $iPosition)
 	; Check the insert position is within bounds
 	If $iLength < $iPosition Or $iPosition < 0 Then Return SetError(1, 0, $sString)
 	; Insert the string
-	Return StringLeft($sString, $iPosition) & $sInsertion & StringRight($sString, $iLength - $iPosition)
+	Return StringLeft($sString, $iPosition) & $sInsertString & StringRight($sString, $iLength - $iPosition)
 EndFunc   ;==>_StringInsert
 
 ; #FUNCTION# ====================================================================================================================
@@ -107,16 +108,15 @@ EndFunc   ;==>_StringInsert
 ; ===============================================================================================================================
 Func _StringProper($sString)
 	Local $bCapNext = True, $sChr = "", $sReturn = ""
-	Local $sPattern = '[a-zA-Z�-�����]'
 	For $i = 1 To StringLen($sString)
 		$sChr = StringMid($sString, $i, 1)
 		Select
 			Case $bCapNext = True
-				If StringRegExp($sChr, $sPattern) Then
+				If StringRegExp($sChr, '[a-zA-ZÀ-ÿšœžŸ]') Then
 					$sChr = StringUpper($sChr)
 					$bCapNext = False
 				EndIf
-			Case Not StringRegExp($sChr, $sPattern)
+			Case Not StringRegExp($sChr, '[a-zA-ZÀ-ÿšœžŸ]')
 				$bCapNext = True
 			Case Else
 				$sChr = StringLower($sChr)

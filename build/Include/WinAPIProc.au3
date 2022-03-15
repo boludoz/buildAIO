@@ -1,17 +1,13 @@
 #include-once
 
 #include "APIProcConstants.au3"
-#include "Security.au3"
-#include "SecurityConstants.au3"
-#include "StringConstants.au3"
 #include "WinAPICom.au3"
-#include "WinAPIError.au3"
-#include "WinAPIHObj.au3"
+#include "WinAPIInternals.au3"
 #include "WinAPIShPath.au3"
 
 ; #INDEX# =======================================================================================================================
 ; Title .........: WinAPI Extended UDF Library for AutoIt3
-; AutoIt Version : 3.3.15.4
+; AutoIt Version : 3.3.14.2
 ; Description ...: Additional variables, constants and functions for the WinAPIProc.au3
 ; Author(s) .....: Yashied, jpm
 ; ===============================================================================================================================
@@ -40,12 +36,8 @@ Global Const $tagPROCESSENTRY32 = 'dword Size;dword Usage;dword ProcessID;ulong_
 ; #CURRENT# =====================================================================================================================
 ; _WinAPI_AdjustTokenPrivileges
 ; _WinAPI_AssignProcessToJobObject
-; _WinAPI_AttachConsole
-; _WinAPI_AttachThreadInput
-; _WinAPI_CreateEvent
 ; _WinAPI_CreateJobObject
 ; _WinAPI_CreateMutex
-; _WinAPI_CreateProcess
 ; _WinAPI_CreateProcessWithToken
 ; _WinAPI_CreateSemaphore
 ; _WinAPI_DuplicateTokenEx
@@ -56,20 +48,14 @@ Global Const $tagPROCESSENTRY32 = 'dword Size;dword Usage;dword ProcessID;ulong_
 ; _WinAPI_EnumProcessModules
 ; _WinAPI_EnumProcessThreads
 ; _WinAPI_EnumProcessWindows
-; _WinAPI_FatalAppExit
 ; _WinAPI_GetCurrentProcessExplicitAppUserModelID
-; _WinAPI_GetCurrentProcessID
-; _WinAPI_GetCurrentThread
-; _WinAPI_GetCurrentThreadId
 ; _WinAPI_GetDeviceDriverBaseName
 ; _WinAPI_GetDeviceDriverFileName
 ; _WinAPI_GetExitCodeProcess
-; _WinAPI_GetGuiResources
 ; _WinAPI_GetModuleFileNameEx
 ; _WinAPI_GetModuleInformation
 ; _WinAPI_GetParentProcess
 ; _WinAPI_GetPriorityClass
-; _WinAPI_GetProcessAffinityMask
 ; _WinAPI_GetProcessCommandLine
 ; _WinAPI_GetProcessFileName
 ; _WinAPI_GetProcessHandleCount
@@ -85,29 +71,23 @@ Global Const $tagPROCESSENTRY32 = 'dword Size;dword Usage;dword ProcessID;ulong_
 ; _WinAPI_GetWindowFileName
 ; _WinAPI_IsElevated
 ; _WinAPI_IsProcessInJob
+; _WinAPI_IsWow64Process
 ; _WinAPI_OpenJobObject
 ; _WinAPI_OpenMutex
-; _WinAPI_OpenProcess
 ; _WinAPI_OpenProcessToken
 ; _WinAPI_OpenSemaphore
 ; _WinAPI_QueryInformationJobObject
 ; _WinAPI_ReleaseMutex
 ; _WinAPI_ReleaseSemaphore
 ; _WinAPI_ResetEvent
-; _WinAPI_SetEvent
 ; _WinAPI_SetInformationJobObject
 ; _WinAPI_SetPriorityClass
-; _WinAPI_SetProcessAffinityMask
 ; _WinAPI_SetThreadDesktop
 ; _WinAPI_SetThreadErrorMode
 ; _WinAPI_SetThreadExecutionState
 ; _WinAPI_TerminateJobObject
 ; _WinAPI_TerminateProcess
 ; _WinAPI_UserHandleGrantAccess
-; _WinAPI_WaitForInputIdle
-; _WinAPI_WaitForMultipleObjects
-; _WinAPI_WaitForSingleObject
-; _WinAPI_WriteConsole
 ; ===============================================================================================================================
 #EndRegion Functions list
 
@@ -121,16 +101,16 @@ Func _WinAPI_AdjustTokenPrivileges($hToken, $aPrivileges, $iAttributes, ByRef $a
 	$aAdjust = 0
 	If Not $aPrivileges And IsNumber($aPrivileges) Then Return 0
 
-	Local $tTP1 = 0, $tTP2, $iCount, $aCall, $bDisable = False
+	Local $tTP1 = 0, $tTP2, $iCount, $aRet, $bDisable = False
 	If $aPrivileges = -1 Then
 		$tTP2 = DllStructCreate('dword')
-		$aCall = DllCall('advapi32.dll', 'bool', 'AdjustTokenPrivileges', 'handle', $hToken, 'bool', 1, 'ptr', 0, _
+		$aRet = DllCall('advapi32.dll', 'bool', 'AdjustTokenPrivileges', 'handle', $hToken, 'bool', 1, 'ptr', 0, _
 				'dword', 0, 'struct*', $tTP2, 'dword*', 0)
 		If @error Then Return SetError(@error, @extended, 0)
 		Local $iLastError = _WinAPI_GetLastError()
 		Switch $iLastError
 			Case 122 ; ERROR_INSUFFICIENT_BUFFER
-				$tTP2 = DllStructCreate('dword;dword[' & ($aCall[6] / 4 - 1) & ']')
+				$tTP2 = DllStructCreate('dword;dword[' & ($aRet[6] / 4 - 1) & ']')
 				If @error Then
 					ContinueCase
 				EndIf
@@ -165,14 +145,14 @@ Func _WinAPI_AdjustTokenPrivileges($hToken, $aPrivileges, $iAttributes, ByRef $a
 		DllStructSetData($tTP1, 1, UBound($aPrivileges))
 		For $i = 0 To UBound($aPrivileges) - 1
 			DllStructSetData($tTP1, 2, $aPrivileges[$i][1], 3 * $i + 3)
-			$aCall = DllCall('advapi32.dll', 'bool', 'LookupPrivilegeValueW', 'ptr', 0, 'wstr', $aPrivileges[$i][0], _
+			$aRet = DllCall('advapi32.dll', 'bool', 'LookupPrivilegeValueW', 'ptr', 0, 'wstr', $aPrivileges[$i][0], _
 					'ptr', DllStructGetPtr($tTP1, 2) + 12 * $i)
-			If @error Or Not $aCall[0] Then Return SetError(@error + 100, @extended, 0)
+			If @error Or Not $aRet[0] Then Return SetError(@error + 100, @extended, 0)
 		Next
 	EndIf
-	$aCall = DllCall('advapi32.dll', 'bool', 'AdjustTokenPrivileges', 'handle', $hToken, 'bool', $bDisable, _
+	$aRet = DllCall('advapi32.dll', 'bool', 'AdjustTokenPrivileges', 'handle', $hToken, 'bool', $bDisable, _
 			'struct*', $tTP1, 'dword', DllStructGetSize($tTP2), 'struct*', $tTP2, 'dword*', 0)
-	If @error Or Not $aCall[0] Then Return SetError(@error + 200, @extended, 0)
+	If @error Or Not $aRet[0] Then Return SetError(@error + 200, @extended, 0)
 
 	Local $iResult
 	Switch _WinAPI_GetLastError()
@@ -186,9 +166,9 @@ Func _WinAPI_AdjustTokenPrivileges($hToken, $aPrivileges, $iAttributes, ByRef $a
 		Local $tData = DllStructCreate('wchar[128]')
 		Dim $aPrivileges[$iCount][2]
 		For $i = 0 To $iCount - 1
-			$aCall = DllCall('advapi32.dll', 'bool', 'LookupPrivilegeNameW', 'ptr', 0, _
+			$aRet = DllCall('advapi32.dll', 'bool', 'LookupPrivilegeNameW', 'ptr', 0, _
 					'ptr', DllStructGetPtr($tTP2, 2) + 12 * $i, 'struct*', $tData, 'dword*', 128)
-			If @error Or Not $aCall[0] Then Return SetError(@error + 300, @extended, 0)
+			If @error Or Not $aRet[0] Then Return SetError(@error + 300, @extended, 0)
 
 			$aPrivileges[$i][1] = DllStructGetData($tTP2, 2, 3 * $i + 3)
 			$aPrivileges[$i][0] = DllStructGetData($tData, 1)
@@ -204,63 +184,29 @@ EndFunc   ;==>_WinAPI_AdjustTokenPrivileges
 ; Modified.......: Jpm
 ; ===============================================================================================================================
 Func _WinAPI_AssignProcessToJobObject($hJob, $hProcess)
-	Local $aCall = DllCall('kernel32.dll', 'bool', 'AssignProcessToJobObject', 'handle', $hJob, 'handle', $hProcess)
+	Local $aRet = DllCall('kernel32.dll', 'bool', 'AssignProcessToJobObject', 'handle', $hJob, 'handle', $hProcess)
 	If @error Then Return SetError(@error, @extended, False)
-	; If Not $aCall[0] Then Return SetError(1000, 0, 0)
+	; If Not $aRet[0] Then Return SetError(1000, 0, 0)
 
-	Return $aCall[0]
+	Return $aRet[0]
 EndFunc   ;==>_WinAPI_AssignProcessToJobObject
-
-; #FUNCTION# ====================================================================================================================
-; Author ........: Paul Campbell (PaulIA)
-; Modified.......:
-; ===============================================================================================================================
-Func _WinAPI_AttachConsole($iPID = -1)
-	Local $aCall = DllCall("kernel32.dll", "bool", "AttachConsole", "dword", $iPID)
-	If @error Then Return SetError(@error, @extended, False)
-	Return $aCall[0]
-EndFunc   ;==>_WinAPI_AttachConsole
-
-; #FUNCTION# ====================================================================================================================
-; Author ........: Paul Campbell (PaulIA)
-; Modified.......:
-; ===============================================================================================================================
-Func _WinAPI_AttachThreadInput($iAttach, $iAttachTo, $bAttach)
-	Local $aCall = DllCall("user32.dll", "bool", "AttachThreadInput", "dword", $iAttach, "dword", $iAttachTo, "bool", $bAttach)
-	If @error Then Return SetError(@error, @extended, False)
-
-	Return $aCall[0]
-EndFunc   ;==>_WinAPI_AttachThreadInput
-
-; #FUNCTION# ====================================================================================================================
-; Author ........: Paul Campbell (PaulIA)
-; Modified.......: jpm
-; ===============================================================================================================================
-Func _WinAPI_CreateEvent($tAttributes = 0, $bManualReset = True, $bInitialState = True, $sName = "")
-	If $sName = "" Then $sName = Null
-
-	Local $aCall = DllCall("kernel32.dll", "handle", "CreateEventW", "struct*", $tAttributes, "bool", $bManualReset, _
-			"bool", $bInitialState, "wstr", $sName)
-	If @error Then Return SetError(@error, @extended, 0)
-
-	Local $iLastError = _WinAPI_GetLastError()
-	If $iLastError Then Return SetExtended($iLastError, 0)
-
-	Return $aCall[0]
-EndFunc   ;==>_WinAPI_CreateEvent
 
 ; #FUNCTION# ====================================================================================================================
 ; Author.........: Yashied
 ; Modified.......: Jpm
 ; ===============================================================================================================================
 Func _WinAPI_CreateJobObject($sName = '', $tSecurity = 0)
-	If Not StringStripWS($sName, $STR_STRIPLEADING + $STR_STRIPTRAILING) Then $sName = Null
+	Local $sTypeOfName = 'wstr'
+	If Not StringStripWS($sName, $STR_STRIPLEADING + $STR_STRIPTRAILING) Then
+		$sTypeOfName = 'ptr'
+		$sName = 0
+	EndIf
 
-	Local $aCall = DllCall('kernel32.dll', 'handle', 'CreateJobObjectW', 'struct*', $tSecurity, 'wstr', $sName)
+	Local $aRet = DllCall('kernel32.dll', 'handle', 'CreateJobObjectW', 'struct*', $tSecurity, $sTypeOfName, $sName)
 	If @error Then Return SetError(@error, @extended, 0)
-	; If Not $aCall[0] Then Return SetError(1000, 0, 0)
+	; If Not $aRet[0] Then Return SetError(1000, 0, 0)
 
-	Return $aCall[0]
+	Return $aRet[0]
 EndFunc   ;==>_WinAPI_CreateJobObject
 
 ; #FUNCTION# ====================================================================================================================
@@ -268,51 +214,39 @@ EndFunc   ;==>_WinAPI_CreateJobObject
 ; Modified.......: Jpm
 ; ===============================================================================================================================
 Func _WinAPI_CreateMutex($sMutex, $bInitial = True, $tSecurity = 0)
-	Local $aCall = DllCall('kernel32.dll', 'handle', 'CreateMutexW', 'struct*', $tSecurity, 'bool', $bInitial, 'wstr', $sMutex)
+	Local $aRet = DllCall('kernel32.dll', 'handle', 'CreateMutexW', 'struct*', $tSecurity, 'bool', $bInitial, 'wstr', $sMutex)
 	If @error Then Return SetError(@error, @extended, 0)
-	; If Not $aCall[0] Then Return SetError(1000, 0, 0)
+	; If Not $aRet[0] Then Return SetError(1000, 0, 0)
 
-	Return $aCall[0]
+	Return $aRet[0]
 EndFunc   ;==>_WinAPI_CreateMutex
-
-; #FUNCTION# ====================================================================================================================
-; Author ........: Paul Campbell (PaulIA)
-; Modified.......: jpm
-; ===============================================================================================================================
-Func _WinAPI_CreateProcess($sAppName, $sCommand, $tSecurity, $tThread, $bInherit, $iFlags, $pEnviron, $sDir, $tStartupInfo, $tProcess)
-	Local $tCommand = 0
-	If $sAppName = "" Then $sAppName = Null
-	If $sCommand <> "" Then
-		; must be MAX_PATH characters, can be updated by CreateProcessW
-		$tCommand = DllStructCreate("wchar Text[" & 260 + 1 & "]")
-		DllStructSetData($tCommand, "Text", $sCommand)
-	EndIf
-	If $sDir = "" Then $sDir = Null
-
-	Local $aCall = DllCall("kernel32.dll", "bool", "CreateProcessW", "wstr", $sAppName, "struct*", $tCommand, _
-			"struct*", $tSecurity, "struct*", $tThread, "bool", $bInherit, "dword", $iFlags, "struct*", $pEnviron, "wstr", $sDir, _
-			"struct*", $tStartupInfo, "struct*", $tProcess)
-	If @error Then Return SetError(@error, @extended, False)
-
-	Return $aCall[0]
-EndFunc   ;==>_WinAPI_CreateProcess
 
 ; #FUNCTION# ====================================================================================================================
 ; Author.........: Yashied
 ; Modified.......: Jpm
 ; ===============================================================================================================================
 Func _WinAPI_CreateProcessWithToken($sApp, $sCmd, $iFlags, $tStartupInfo, $tProcessInfo, $hToken, $iLogon = 0, $pEnvironment = 0, $sDir = '')
-	If Not StringStripWS($sApp, $STR_STRIPLEADING + $STR_STRIPTRAILING) Then $sApp = Null
-	If Not StringStripWS($sCmd, $STR_STRIPLEADING + $STR_STRIPTRAILING) Then $sCmd = Null
-	If Not StringStripWS($sDir, $STR_STRIPLEADING + $STR_STRIPTRAILING) Then $sDir = Null
+	Local $sTypeOfApp = 'wstr', $sTypeOfCmd = 'wstr', $sTypeOfDir = 'wstr'
+	If Not StringStripWS($sApp, $STR_STRIPLEADING + $STR_STRIPTRAILING) Then
+		$sTypeOfApp = 'ptr'
+		$sApp = 0
+	EndIf
+	If Not StringStripWS($sCmd, $STR_STRIPLEADING + $STR_STRIPTRAILING) Then
+		$sTypeOfCmd = 'ptr'
+		$sCmd = 0
+	EndIf
+	If Not StringStripWS($sDir, $STR_STRIPLEADING + $STR_STRIPTRAILING) Then
+		$sTypeOfDir = 'ptr'
+		$sDir = 0
+	EndIf
 
-	Local $aCall = DllCall('advapi32.dll', 'bool', 'CreateProcessWithTokenW', 'handle', $hToken, 'dword', $iLogon, _
-			'wstr', $sApp, 'wstr', $sCmd, 'dword', $iFlags, 'struct*', $pEnvironment, _
-			'wstr', $sDir, 'struct*', $tStartupInfo, 'struct*', $tProcessInfo)
+	Local $aRet = DllCall('advapi32.dll', 'bool', 'CreateProcessWithTokenW', 'handle', $hToken, 'dword', $iLogon, _
+			$sTypeOfApp, $sApp, $sTypeOfCmd, $sCmd, 'dword', $iFlags, 'struct*', $pEnvironment, _
+			$sTypeOfDir, $sDir, 'struct*', $tStartupInfo, 'struct*', $tProcessInfo)
 	If @error Then Return SetError(@error, @extended, 0)
-	; If Not $aCall[0] Then Return SetError(1000, 0, 0)
+	; If Not $aRet[0] Then Return SetError(1000, 0, 0)
 
-	Return $aCall[0]
+	Return $aRet[0]
 EndFunc   ;==>_WinAPI_CreateProcessWithToken
 
 ; #FUNCTION# ====================================================================================================================
@@ -320,12 +254,12 @@ EndFunc   ;==>_WinAPI_CreateProcessWithToken
 ; Modified.......: Jpm
 ; ===============================================================================================================================
 Func _WinAPI_CreateSemaphore($sSemaphore, $iInitial, $iMaximum, $tSecurity = 0)
-	Local $aCall = DllCall('kernel32.dll', 'handle', 'CreateSemaphoreW', 'struct*', $tSecurity, 'long', $iInitial, _
+	Local $aRet = DllCall('kernel32.dll', 'handle', 'CreateSemaphoreW', 'struct*', $tSecurity, 'long', $iInitial, _
 			'long', $iMaximum, 'wstr', $sSemaphore)
 	If @error Then Return SetError(@error, @extended, 0)
-	; If Not $aCall[0] Then Return SetError(1000, 0, 0)
+	; If Not $aRet[0] Then Return SetError(1000, 0, 0)
 
-	Return $aCall[0]
+	Return $aRet[0]
 EndFunc   ;==>_WinAPI_CreateSemaphore
 
 ; #FUNCTION# ====================================================================================================================
@@ -333,12 +267,12 @@ EndFunc   ;==>_WinAPI_CreateSemaphore
 ; Modified.......: Jpm
 ; ===============================================================================================================================
 Func _WinAPI_DuplicateTokenEx($hToken, $iAccess, $iLevel, $iType = 1, $tSecurity = 0)
-	Local $aCall = DllCall('advapi32.dll', 'bool', 'DuplicateTokenEx', 'handle', $hToken, 'dword', $iAccess, _
+	Local $aRet = DllCall('advapi32.dll', 'bool', 'DuplicateTokenEx', 'handle', $hToken, 'dword', $iAccess, _
 			'struct*', $tSecurity, 'int', $iLevel, 'int', $iType, 'handle*', 0)
-	If @error Or Not $aCall[0] Then Return SetError(@error, @extended, 0)
-	; If Not $aCall[0] Then Return SetError(1000, 0, 0)
+	If @error Or Not $aRet[0] Then Return SetError(@error, @extended, 0)
+	; If Not $aRet[0] Then Return SetError(1000, 0, 0)
 
-	Return $aCall[6]
+	Return $aRet[6]
 EndFunc   ;==>_WinAPI_DuplicateTokenEx
 
 ; #FUNCTION# ====================================================================================================================
@@ -348,12 +282,12 @@ EndFunc   ;==>_WinAPI_DuplicateTokenEx
 Func _WinAPI_EmptyWorkingSet($iPID = 0)
 	If Not $iPID Then $iPID = @AutoItPID
 
-	Local $hProcess = DllCall('kernel32.dll', 'handle', 'OpenProcess', 'dword', ((_WinAPI_GetVersion() < 6.0) ? 0x00000500 : 0x00001100), _
+	Local $hProcess = DllCall('kernel32.dll', 'handle', 'OpenProcess', 'dword', __Iif($__WINVER < 0x0600, 0x00000500, 0x00001100), _
 			'bool', 0, 'dword', $iPID)
 	If @error Or Not $hProcess[0] Then Return SetError(@error + 20, @extended, 0)
 
-	Local $aCall = DllCall(@SystemDir & '\psapi.dll', 'bool', 'EmptyWorkingSet', 'handle', $hProcess[0])
-	If __CheckErrorCloseHandle($aCall, $hProcess[0]) Then Return SetError(@error, @extended, 0)
+	Local $aRet = DllCall(@SystemDir & '\psapi.dll', 'bool', 'EmptyWorkingSet', 'handle', $hProcess[0])
+	If __CheckErrorCloseHandle($aRet, $hProcess[0]) Then Return SetError(@error, @extended, 0)
 
 	Return 1
 EndFunc   ;==>_WinAPI_EmptyWorkingSet
@@ -369,26 +303,26 @@ Func _WinAPI_EnumChildProcess($iPID = 0)
 	If @error Or ($hSnapshot[0] = Ptr(-1)) Then Return SetError(@error + 10, @extended, 0) ; $INVALID_HANDLE_VALUE
 
 	Local $tPROCESSENTRY32 = DllStructCreate($tagPROCESSENTRY32)
-	Local $aRet[101][2] = [[0]]
+	Local $aResult[101][2] = [[0]]
 
 	$hSnapshot = $hSnapshot[0]
 	DllStructSetData($tPROCESSENTRY32, 'Size', DllStructGetSize($tPROCESSENTRY32))
-	Local $aCall = DllCall('kernel32.dll', 'bool', 'Process32FirstW', 'handle', $hSnapshot, 'struct*', $tPROCESSENTRY32)
+	Local $aRet = DllCall('kernel32.dll', 'bool', 'Process32FirstW', 'handle', $hSnapshot, 'struct*', $tPROCESSENTRY32)
 	Local $iError = @error
-	While (Not @error) And ($aCall[0])
+	While (Not @error) And ($aRet[0])
 		If DllStructGetData($tPROCESSENTRY32, 'ParentProcessID') = $iPID Then
-			__Inc($aRet)
-			$aRet[$aRet[0][0]][0] = DllStructGetData($tPROCESSENTRY32, 'ProcessID')
-			$aRet[$aRet[0][0]][1] = DllStructGetData($tPROCESSENTRY32, 'ExeFile')
+			__Inc($aResult)
+			$aResult[$aResult[0][0]][0] = DllStructGetData($tPROCESSENTRY32, 'ProcessID')
+			$aResult[$aResult[0][0]][1] = DllStructGetData($tPROCESSENTRY32, 'ExeFile')
 		EndIf
-		$aCall = DllCall('kernel32.dll', 'bool', 'Process32NextW', 'handle', $hSnapshot, 'struct*', $tPROCESSENTRY32)
+		$aRet = DllCall('kernel32.dll', 'bool', 'Process32NextW', 'handle', $hSnapshot, 'struct*', $tPROCESSENTRY32)
 		$iError = @error
 	WEnd
 	DllCall("kernel32.dll", "bool", "CloseHandle", "handle", $hSnapshot)
-	If Not $aRet[0][0] Then Return SetError($iError + 20, 0, 0)
+	If Not $aResult[0][0] Then Return SetError($iError + 20, 0, 0)
 
-	__Inc($aRet, -1)
-	Return $aRet
+	__Inc($aResult, -1)
+	Return $aResult
 EndFunc   ;==>_WinAPI_EnumChildProcess
 
 ; #FUNCTION# ====================================================================================================================
@@ -396,25 +330,25 @@ EndFunc   ;==>_WinAPI_EnumChildProcess
 ; Modified.......: jpm
 ; ===============================================================================================================================
 Func _WinAPI_EnumDeviceDrivers()
-	Local $aCall = DllCall(@SystemDir & '\psapi.dll', 'bool', 'EnumDeviceDrivers', 'ptr', 0, 'dword', 0, 'dword*', 0)
-	If @error Or Not $aCall[0] Then Return SetError(@error + 10, @extended, 0)
+	Local $aRet = DllCall(@SystemDir & '\psapi.dll', 'bool', 'EnumDeviceDrivers', 'ptr', 0, 'dword', 0, 'dword*', 0)
+	If @error Or Not $aRet[0] Then Return SetError(@error + 10, @extended, 0)
 
 	Local $iSize
 	If @AutoItX64 Then
-		$iSize = $aCall[3] / 8
+		$iSize = $aRet[3] / 8
 	Else
-		$iSize = $aCall[3] / 4
+		$iSize = $aRet[3] / 4
 	EndIf
 	Local $tData = DllStructCreate('ptr[' & $iSize & ']')
-	$aCall = DllCall(@SystemDir & '\psapi.dll', 'bool', 'EnumDeviceDrivers', 'struct*', $tData, _
+	$aRet = DllCall(@SystemDir & '\psapi.dll', 'bool', 'EnumDeviceDrivers', 'struct*', $tData, _
 			'dword', DllStructGetSize($tData), 'dword*', 0)
-	If @error Or Not $aCall[0] Then Return SetError(@error + 20, @extended, 0)
+	If @error Or Not $aRet[0] Then Return SetError(@error + 20, @extended, 0)
 
-	Local $aRet[$iSize + 1] = [$iSize]
+	Local $aResult[$iSize + 1] = [$iSize]
 	For $i = 1 To $iSize
-		$aRet[$i] = DllStructGetData($tData, 1, $i)
+		$aResult[$i] = DllStructGetData($tData, 1, $i)
 	Next
-	Return $aRet
+	Return $aResult
 EndFunc   ;==>_WinAPI_EnumDeviceDrivers
 
 ; #FUNCTION# ====================================================================================================================
@@ -424,38 +358,30 @@ EndFunc   ;==>_WinAPI_EnumDeviceDrivers
 Func _WinAPI_EnumProcessHandles($iPID = 0, $iType = 0)
 	If Not $iPID Then $iPID = @AutoItPID
 
-	Local $aRet[101][4] = [[0]]
+	Local $aResult[101][4] = [[0]]
 
-	Local $tagSYSTEM_HANDLE_TABLE_ENTRY_INFO = 'ulong ProcessId;byte ObjectTypeNumber;byte Flags;ushort Handle;ptr Object;ulong GrantedAccess'
-	Local $tHandle = DllStructCreate($tagSYSTEM_HANDLE_TABLE_ENTRY_INFO)
-	Local $iEntrySize = DllStructGetSize($tHandle)
-	Local $iMaxEntries = 262143
-	Local $tSHI = DllStructCreate('ulong_ptr NumberOfHandles;byte Data[' & ($iMaxEntries + 1) * $iEntrySize & ']')
-
-	Local $aCall = DllCall('ntdll.dll', 'long', 'ZwQuerySystemInformation', 'uint', 16, _ ; SystemHandleInformation
-			'struct*', $tSHI, 'ulong', DllStructGetSize($tSHI), 'ulong*', 0)
+	Local $tSHI = DllStructCreate('ulong;byte[4194304]')
+	Local $aRet = DllCall('ntdll.dll', 'long', 'ZwQuerySystemInformation', 'uint', 16, 'struct*', $tSHI, _
+			'ulong', DllStructGetSize($tSHI), 'ulong*', 0)
 	If @error Then Return SetError(@error, @extended, 0)
-	If $aCall[0] Then Return SetError(10, $aCall[0], 0)
+	If $aRet[0] Then Return SetError(10, $aRet[0], 0)
 
-	Local $pData = DllStructGetPtr($tSHI, 'Data')
-	Local $i, $iNumberOfHandles = DllStructGetData($tSHI, 'NumberOfHandles')
-	For $i = 1 To $iNumberOfHandles
-		If $i > $iMaxEntries Then ExitLoop
-		$tHandle = DllStructCreate($tagSYSTEM_HANDLE_TABLE_ENTRY_INFO, $pData + ($i - 1) * $iEntrySize)
-		If (DllStructGetData($tHandle, 'ProcessId') = $iPID) And ((Not $iType) Or ($iType = DllStructGetData($tHandle, 'ObjectTypeNumber'))) Then
-			__Inc($aRet)
-			$aRet[$aRet[0][0]][0] = Ptr(DllStructGetData($tHandle, 'Handle'))
-			$aRet[$aRet[0][0]][1] = DllStructGetData($tHandle, 'ObjectTypeNumber')
-			$aRet[$aRet[0][0]][2] = DllStructGetData($tHandle, 'Flags')
-			$aRet[$aRet[0][0]][3] = DllStructGetData($tHandle, 'GrantedAccess')
+	Local $pData = DllStructGetPtr($tSHI, 2)
+	Local $tHandle
+	For $i = 1 To DllStructGetData($tSHI, 1)
+		$tHandle = DllStructCreate('align 4;ulong;byte;byte;ushort;ptr;ulong', $pData + __Iif(@AutoItX64, 4 + ($i - 1) * 24, ($i - 1) * 16))
+		If (DllStructGetData($tHandle, 1) = $iPID) And ((Not $iType) Or ($iType = DllStructGetData($tHandle, 2))) Then
+			__Inc($aResult)
+			$aResult[$aResult[0][0]][0] = Ptr(DllStructGetData($tHandle, 4))
+			$aResult[$aResult[0][0]][1] = DllStructGetData($tHandle, 2)
+			$aResult[$aResult[0][0]][2] = DllStructGetData($tHandle, 3)
+			$aResult[$aResult[0][0]][3] = DllStructGetData($tHandle, 6)
 		EndIf
 	Next
-	If Not $aRet[0][0] Then Return SetError(11, 0, 0)
+	If Not $aResult[0][0] Then Return SetError(11, 0, 0)
 
-	__Inc($aRet, -1)
-
-	If $i < $iNumberOfHandles Then Return SetExtended($iNumberOfHandles, $aRet)
-	Return $aRet
+	__Inc($aResult, -1)
+	Return $aResult
 EndFunc   ;==>_WinAPI_EnumProcessHandles
 
 ; #FUNCTION# ====================================================================================================================
@@ -465,54 +391,54 @@ EndFunc   ;==>_WinAPI_EnumProcessHandles
 Func _WinAPI_EnumProcessModules($iPID = 0, $iFlag = 0)
 	If Not $iPID Then $iPID = @AutoItPID
 
-	Local $hProcess = DllCall('kernel32.dll', 'handle', 'OpenProcess', 'dword', ((_WinAPI_GetVersion() < 6.0) ? 0x00000410 : 0x00001010), _
+	Local $hProcess = DllCall('kernel32.dll', 'handle', 'OpenProcess', 'dword', __Iif($__WINVER < 0x0600, 0x00000410, 0x00001010), _
 			'bool', 0, 'dword', $iPID)
 	If @error Or Not $hProcess[0] Then Return SetError(@error + 20, @extended, 0)
 
-	Local $iCount, $aCall, $iError = 0
+	Local $iCount, $aRet, $iError = 0
 	Do
-		If _WinAPI_GetVersion() >= 6.0 Then
-			$aCall = DllCall(@SystemDir & '\psapi.dll', 'bool', 'EnumProcessModulesEx', 'handle', $hProcess[0], 'ptr', 0, _
+		If $__WINVER >= 0x0600 Then
+			$aRet = DllCall(@SystemDir & '\psapi.dll', 'bool', 'EnumProcessModulesEx', 'handle', $hProcess[0], 'ptr', 0, _
 					'dword', 0, 'dword*', 0, 'dword', $iFlag)
 		Else
-			$aCall = DllCall(@SystemDir & '\psapi.dll', 'bool', 'EnumProcessModules', 'handle', $hProcess[0], 'ptr', 0, _
+			$aRet = DllCall(@SystemDir & '\psapi.dll', 'bool', 'EnumProcessModules', 'handle', $hProcess[0], 'ptr', 0, _
 					'dword', 0, 'dword*', 0)
 		EndIf
-		If @error Or Not $aCall[0] Then
+		If @error Or Not $aRet[0] Then
 			$iError = @error + 10
 			ExitLoop
 		EndIf
 		If @AutoItX64 Then
-			$iCount = $aCall[4] / 8
+			$iCount = $aRet[4] / 8
 		Else
-			$iCount = $aCall[4] / 4
+			$iCount = $aRet[4] / 4
 		EndIf
 		Local $tPtr = DllStructCreate('ptr[' & $iCount & ']')
 		If @error Then
 			$iError = @error + 30
 			ExitLoop
 		EndIf
-		If _WinAPI_GetVersion() >= 6.0 Then
-			$aCall = DllCall(@SystemDir & '\psapi.dll', 'bool', 'EnumProcessModulesEx', 'handle', $hProcess[0], 'struct*', $tPtr, _
+		If $__WINVER >= 0x0600 Then
+			$aRet = DllCall(@SystemDir & '\psapi.dll', 'bool', 'EnumProcessModulesEx', 'handle', $hProcess[0], 'struct*', $tPtr, _
 					'dword', DllStructGetSize($tPtr), 'dword*', 0, 'dword', $iFlag)
 		Else
-			$aCall = DllCall(@SystemDir & '\psapi.dll', 'bool', 'EnumProcessModules', 'handle', $hProcess[0], 'struct*', $tPtr, _
+			$aRet = DllCall(@SystemDir & '\psapi.dll', 'bool', 'EnumProcessModules', 'handle', $hProcess[0], 'struct*', $tPtr, _
 					'dword', DllStructGetSize($tPtr), 'dword*', 0)
 		EndIf
-		If @error Or Not $aCall[0] Then
+		If @error Or Not $aRet[0] Then
 			$iError = @error + 40
 			ExitLoop
 		EndIf
-		Local $aRet[$iCount + 1][2] = [[$iCount]]
+		Local $aResult[$iCount + 1][2] = [[$iCount]]
 		For $i = 1 To $iCount
-			$aRet[$i][0] = DllStructGetData($tPtr, 1, $i)
-			$aRet[$i][1] = _WinAPI_GetModuleFileNameEx($hProcess[0], $aRet[$i][0])
+			$aResult[$i][0] = DllStructGetData($tPtr, 1, $i)
+			$aResult[$i][1] = _WinAPI_GetModuleFileNameEx($hProcess[0], $aResult[$i][0])
 		Next
 	Until 1
 	DllCall("kernel32.dll", "bool", "CloseHandle", "handle", $hProcess[0])
 	If $iError Then Return SetError($iError, 0, 0)
 
-	Return $aRet
+	Return $aResult
 EndFunc   ;==>_WinAPI_EnumProcessModules
 
 ; #FUNCTION# ====================================================================================================================
@@ -527,23 +453,23 @@ Func _WinAPI_EnumProcessThreads($iPID = 0)
 
 	Local Const $tagTHREADENTRY32 = 'dword Size;dword Usage;dword ThreadID;dword OwnerProcessID;long BasePri;long DeltaPri;dword Flags'
 	Local $tTHREADENTRY32 = DllStructCreate($tagTHREADENTRY32)
-	Local $aRet[101] = [0]
+	Local $aResult[101] = [0]
 
 	$hSnapshot = $hSnapshot[0]
 	DllStructSetData($tTHREADENTRY32, 'Size', DllStructGetSize($tTHREADENTRY32))
-	Local $aCall = DllCall('kernel32.dll', 'bool', 'Thread32First', 'handle', $hSnapshot, 'struct*', $tTHREADENTRY32)
-	While Not @error And $aCall[0]
+	Local $aRet = DllCall('kernel32.dll', 'bool', 'Thread32First', 'handle', $hSnapshot, 'struct*', $tTHREADENTRY32)
+	While Not @error And $aRet[0]
 		If DllStructGetData($tTHREADENTRY32, 'OwnerProcessID') = $iPID Then
-			__Inc($aRet)
-			$aRet[$aRet[0]] = DllStructGetData($tTHREADENTRY32, 'ThreadID')
+			__Inc($aResult)
+			$aResult[$aResult[0]] = DllStructGetData($tTHREADENTRY32, 'ThreadID')
 		EndIf
-		$aCall = DllCall('kernel32.dll', 'bool', 'Thread32Next', 'handle', $hSnapshot, 'struct*', $tTHREADENTRY32)
+		$aRet = DllCall('kernel32.dll', 'bool', 'Thread32Next', 'handle', $hSnapshot, 'struct*', $tTHREADENTRY32)
 	WEnd
 	DllCall("kernel32.dll", "bool", "CloseHandle", "handle", $hSnapshot)
-	If Not $aRet[0] Then Return SetError(1, 0, 0)
+	If Not $aResult[0] Then Return SetError(1, 0, 0)
 
-	__Inc($aRet, -1)
-	Return $aRet
+	__Inc($aResult, -1)
+	Return $aResult
 EndFunc   ;==>_WinAPI_EnumProcessThreads
 
 ; #FUNCTION# ====================================================================================================================
@@ -572,72 +498,30 @@ Func _WinAPI_EnumProcessWindows($iPID = 0, $bVisible = True)
 EndFunc   ;==>_WinAPI_EnumProcessWindows
 
 ; #FUNCTION# ====================================================================================================================
-; Author ........: Paul Campbell (PaulIA)
-; Modified.......: jpm
-; ===============================================================================================================================
-Func _WinAPI_FatalAppExit($sMessage)
-	DllCall("kernel32.dll", "none", "FatalAppExitW", "uint", 0, "wstr", $sMessage)
-	If @error Then Return SetError(@error, @extended)
-EndFunc   ;==>_WinAPI_FatalAppExit
-
-; #FUNCTION# ====================================================================================================================
 ; Author.........: Yashied
 ; Modified.......: jpm
 ; ===============================================================================================================================
 Func _WinAPI_GetCurrentProcessExplicitAppUserModelID()
-	Local $aCall = DllCall('shell32.dll', 'long', 'GetCurrentProcessExplicitAppUserModelID', 'ptr*', 0)
+	Local $aRet = DllCall('shell32.dll', 'long', 'GetCurrentProcessExplicitAppUserModelID', 'ptr*', 0)
 	If @error Then Return SetError(@error, @extended, '')
-	If $aCall[0] Then Return SetError(10, $aCall[0], '')
+	If $aRet[0] Then Return SetError(10, $aRet[0], '')
 
-	Local $sID = _WinAPI_GetString($aCall[1])
-	_WinAPI_CoTaskMemFree($aCall[1])
+	Local $sID = _WinAPI_GetString($aRet[1])
+	_WinAPI_CoTaskMemFree($aRet[1])
 	Return $sID
 EndFunc   ;==>_WinAPI_GetCurrentProcessExplicitAppUserModelID
-
-; #FUNCTION# ====================================================================================================================
-; Author ........: Paul Campbell (PaulIA)
-; Modified.......:
-; ===============================================================================================================================
-Func _WinAPI_GetCurrentProcessID()
-	Local $aCall = DllCall("kernel32.dll", "dword", "GetCurrentProcessId")
-	If @error Then Return SetError(@error, @extended, 0)
-
-	Return $aCall[0]
-EndFunc   ;==>_WinAPI_GetCurrentProcessID
-
-; #FUNCTION# ====================================================================================================================
-; Author ........: Paul Campbell (PaulIA)
-; Modified.......:
-; ===============================================================================================================================
-Func _WinAPI_GetCurrentThread()
-	Local $aCall = DllCall("kernel32.dll", "handle", "GetCurrentThread")
-	If @error Then Return SetError(@error, @extended, 0)
-
-	Return $aCall[0]
-EndFunc   ;==>_WinAPI_GetCurrentThread
-
-; #FUNCTION# ====================================================================================================================
-; Author ........: Paul Campbell (PaulIA)
-; Modified.......:
-; ===============================================================================================================================
-Func _WinAPI_GetCurrentThreadId()
-	Local $aCall = DllCall("kernel32.dll", "dword", "GetCurrentThreadId")
-	If @error Then Return SetError(@error, @extended, 0)
-
-	Return $aCall[0]
-EndFunc   ;==>_WinAPI_GetCurrentThreadId
 
 ; #FUNCTION# ====================================================================================================================
 ; Author.........: Yashied
 ; Modified.......: Jpm
 ; ===============================================================================================================================
 Func _WinAPI_GetDeviceDriverBaseName($pDriver)
-	Local $aCall = DllCall(@SystemDir & '\psapi.dll', 'dword', 'GetDeviceDriverBaseNameW', 'ptr', $pDriver, 'wstr', '', _
+	Local $aRet = DllCall(@SystemDir & '\psapi.dll', 'dword', 'GetDeviceDriverBaseNameW', 'ptr', $pDriver, 'wstr', '', _
 			'dword', 4096)
 	If @error Then Return SetError(@error, @extended, '')
-	; If Not $aCall[0] Then Return SetError(1000, 0, 0)
+	; If Not $aRet[0] Then Return SetError(1000, 0, 0)
 
-	Return $aCall[2]
+	Return $aRet[2]
 EndFunc   ;==>_WinAPI_GetDeviceDriverBaseName
 
 ; #FUNCTION# ====================================================================================================================
@@ -645,12 +529,12 @@ EndFunc   ;==>_WinAPI_GetDeviceDriverBaseName
 ; Modified.......: Jpm
 ; ===============================================================================================================================
 Func _WinAPI_GetDeviceDriverFileName($pDriver)
-	Local $aCall = DllCall(@SystemDir & '\psapi.dll', 'dword', 'GetDeviceDriverFileNameW', 'ptr', $pDriver, 'wstr', '', _
+	Local $aRet = DllCall(@SystemDir & '\psapi.dll', 'dword', 'GetDeviceDriverFileNameW', 'ptr', $pDriver, 'wstr', '', _
 			'dword', 4096)
 	If @error Then Return SetError(@error, @extended, '')
-	; If Not $aCall[0] Then Return SetError(1000, 0, 0)
+	; If Not $aRet[0] Then Return SetError(1000, 0, 0)
 
-	Return $aCall[2]
+	Return $aRet[2]
 EndFunc   ;==>_WinAPI_GetDeviceDriverFileName
 
 ; #FUNCTION# ====================================================================================================================
@@ -658,35 +542,23 @@ EndFunc   ;==>_WinAPI_GetDeviceDriverFileName
 ; Modified.......: Jpm
 ; ===============================================================================================================================
 Func _WinAPI_GetExitCodeProcess($hProcess)
-	Local $aCall = DllCall('kernel32.dll', 'bool', 'GetExitCodeProcess', 'handle', $hProcess, 'dword*', 0)
-	If @error Or Not $aCall[0] Then Return SetError(@error, @extended, 0)
-	; If Not $aCall[0] Then Return SetError(1000, 0, 0)
+	Local $aRet = DllCall('kernel32.dll', 'bool', 'GetExitCodeProcess', 'handle', $hProcess, 'dword*', 0)
+	If @error Or Not $aRet[0] Then Return SetError(@error, @extended, 0)
+	; If Not $aRet[0] Then Return SetError(1000, 0, 0)
 
-	Return $aCall[2]
+	Return $aRet[2]
 EndFunc   ;==>_WinAPI_GetExitCodeProcess
-
-; #FUNCTION# ====================================================================================================================
-; Author ........: jpm
-; Modified.......:
-; ===============================================================================================================================
-Func _WinAPI_GetGuiResources($iFlag = 0, $hProcess = -1)
-	If $hProcess = -1 Then $hProcess = _WinAPI_GetCurrentProcess()
-	Local $aCall = DllCall("user32.dll", "dword", "GetGuiResources", "handle", $hProcess, "dword", $iFlag)
-	If @error Then Return SetError(@error, @extended, 0)
-
-	Return $aCall[0]
-EndFunc   ;==>_WinAPI_GetGuiResources
 
 ; #FUNCTION# ====================================================================================================================
 ; Author.........: Yashied
 ; Modified.......: Jpm
 ; ===============================================================================================================================
 Func _WinAPI_GetModuleFileNameEx($hProcess, $hModule = 0)
-	Local $aCall = DllCall(@SystemDir & '\psapi.dll', 'dword', 'GetModuleFileNameExW', 'handle', $hProcess, 'handle', $hModule, _
+	Local $aRet = DllCall(@SystemDir & '\psapi.dll', 'dword', 'GetModuleFileNameExW', 'handle', $hProcess, 'handle', $hModule, _
 			'wstr', '', 'int', 4096)
-	If @error Or Not $aCall[0] Then Return SetError(@error + 10, @extended, '')
+	If @error Or Not $aRet[0] Then Return SetError(@error + 10, @extended, '')
 
-	Return $aCall[3]
+	Return $aRet[3]
 EndFunc   ;==>_WinAPI_GetModuleFileNameEx
 
 ; #FUNCTION# ====================================================================================================================
@@ -695,9 +567,9 @@ EndFunc   ;==>_WinAPI_GetModuleFileNameEx
 ; ===============================================================================================================================
 Func _WinAPI_GetModuleInformation($hProcess, $hModule = 0)
 	Local $tMODULEINFO = DllStructCreate($tagMODULEINFO)
-	Local $aCall = DllCall(@SystemDir & '\psapi.dll', 'bool', 'GetModuleInformation', 'handle', $hProcess, 'handle', $hModule, _
+	Local $aRet = DllCall(@SystemDir & '\psapi.dll', 'bool', 'GetModuleInformation', 'handle', $hProcess, 'handle', $hModule, _
 			'struct*', $tMODULEINFO, 'dword', DllStructGetSize($tMODULEINFO))
-	If @error Or Not $aCall[0] Then Return SetError(@error + 10, @extended, 0)
+	If @error Or Not $aRet[0] Then Return SetError(@error + 10, @extended, 0)
 
 	Return $tMODULEINFO
 EndFunc   ;==>_WinAPI_GetModuleInformation
@@ -717,14 +589,14 @@ Func _WinAPI_GetParentProcess($iPID = 0)
 
 	$hSnapshot = $hSnapshot[0]
 	DllStructSetData($tPROCESSENTRY32, 'Size', DllStructGetSize($tPROCESSENTRY32))
-	Local $aCall = DllCall('kernel32.dll', 'bool', 'Process32FirstW', 'handle', $hSnapshot, 'struct*', $tPROCESSENTRY32)
+	Local $aRet = DllCall('kernel32.dll', 'bool', 'Process32FirstW', 'handle', $hSnapshot, 'struct*', $tPROCESSENTRY32)
 	Local $iError = @error
-	While (Not @error) And ($aCall[0])
+	While (Not @error) And ($aRet[0])
 		If DllStructGetData($tPROCESSENTRY32, 'ProcessID') = $iPID Then
 			$iResult = DllStructGetData($tPROCESSENTRY32, 'ParentProcessID')
 			ExitLoop
 		EndIf
-		$aCall = DllCall('kernel32.dll', 'bool', 'Process32NextW', 'handle', $hSnapshot, 'struct*', $tPROCESSENTRY32)
+		$aRet = DllCall('kernel32.dll', 'bool', 'Process32NextW', 'handle', $hSnapshot, 'struct*', $tPROCESSENTRY32)
 		$iError = @error
 	WEnd
 	DllCall("kernel32.dll", "bool", "CloseHandle", "handle", $hSnapshot)
@@ -740,33 +612,18 @@ EndFunc   ;==>_WinAPI_GetParentProcess
 Func _WinAPI_GetPriorityClass($iPID = 0)
 	If Not $iPID Then $iPID = @AutoItPID
 
-	Local $hProcess = DllCall('kernel32.dll', 'handle', 'OpenProcess', 'dword', ((_WinAPI_GetVersion() < 6.0) ? 0x00000400 : 0x00001000), 'bool', 0, 'dword', $iPID)
+	Local $hProcess = DllCall('kernel32.dll', 'handle', 'OpenProcess', 'dword', __Iif($__WINVER < 0x0600, 0x00000400, 0x00001000), 'bool', 0, 'dword', $iPID)
 	If @error Or Not $hProcess[0] Then Return SetError(@error + 20, @extended, 0)
 	; If Not $hProcess[0] Then Return SetError(1000, 0, 0)
 
 	Local $iError = 0
-	Local $aCall = DllCall('kernel32.dll', 'dword', 'GetPriorityClass', 'handle', $hProcess[0])
+	Local $aRet = DllCall('kernel32.dll', 'dword', 'GetPriorityClass', 'handle', $hProcess[0])
 	If @error Then $iError = @error
 	DllCall("kernel32.dll", "bool", "CloseHandle", "handle", $hProcess[0])
 	If $iError Then Return SetError($iError, 0, 0)
 
-	Return $aCall[0]
+	Return $aRet[0]
 EndFunc   ;==>_WinAPI_GetPriorityClass
-
-; #FUNCTION# ====================================================================================================================
-; Author ........: Paul Campbell (PaulIA)
-; Modified.......: JPM
-; ===============================================================================================================================
-Func _WinAPI_GetProcessAffinityMask($hProcess)
-	Local $aCall = DllCall("kernel32.dll", "bool", "GetProcessAffinityMask", "handle", $hProcess, "dword_ptr*", 0, "dword_ptr*", 0)
-	If @error Or Not $aCall[0] Then Return SetError(@error + 10, @extended, 0)
-
-	Local $aMask[3]
-	$aMask[0] = True
-	$aMask[1] = $aCall[2]
-	$aMask[2] = $aCall[3]
-	Return $aMask
-EndFunc   ;==>_WinAPI_GetProcessAffinityMask
 
 ; #FUNCTION# ====================================================================================================================
 ; Author.........: Yashied
@@ -775,7 +632,7 @@ EndFunc   ;==>_WinAPI_GetProcessAffinityMask
 Func _WinAPI_GetProcessCommandLine($iPID = 0)
 	If Not $iPID Then $iPID = @AutoItPID
 
-	Local $hProcess = DllCall('kernel32.dll', 'handle', 'OpenProcess', 'dword', ((_WinAPI_GetVersion() < 6.0) ? 0x00000410 : 0x00001010), _
+	Local $hProcess = DllCall('kernel32.dll', 'handle', 'OpenProcess', 'dword', __Iif($__WINVER < 0x0600, 0x00000410, 0x00001010), _
 			'bool', 0, 'dword', $iPID)
 	If @error Or Not $hProcess[0] Then Return SetError(@error + 20, @extended, '')
 
@@ -786,25 +643,25 @@ Func _WinAPI_GetProcessCommandLine($iPID = 0)
 	Local $tUPP = DllStructCreate('ulong AllocationSize;ulong ActualSize;ulong Flags;ulong Unknown1;ushort LengthUnknown2;ushort MaxLengthUnknown2;ptr Unknown2;ptr InputHandle;ptr OutputHandle;ptr ErrorHandle;ushort LengthCurrentDirectory;ushort MaxLengthCurrentDirectory;ptr CurrentDirectory;ptr CurrentDirectoryHandle;ushort LengthSearchPaths;ushort MaxLengthSearchPaths;ptr SearchPaths;ushort LengthApplicationName;ushort MaxLengthApplicationName;ptr ApplicationName;ushort LengthCommandLine;ushort MaxLengthCommandLine;ptr CommandLine;ptr EnvironmentBlock;ulong Unknown[9];ushort LengthUnknown3;ushort MaxLengthUnknown3;ptr Unknown3;ushort LengthUnknown4;ushort MaxLengthUnknown4;ptr Unknown4;ushort LengthUnknown5;ushort MaxLengthUnknown5;ptr Unknown5')
 	Local $tCMD
 
-	Local $aCall, $iError = 0
+	Local $aRet, $iError = 0
 	Do
-		$aCall = DllCall('ntdll.dll', 'long', 'NtQueryInformationProcess', 'handle', $hProcess, 'ulong', 0, 'struct*', $tPBI, _
+		$aRet = DllCall('ntdll.dll', 'long', 'NtQueryInformationProcess', 'handle', $hProcess, 'ulong', 0, 'struct*', $tPBI, _
 				'ulong', DllStructGetSize($tPBI), 'ulong*', 0)
-		If @error Or $aCall[0] Then
+		If @error Or $aRet[0] Then
 			$iError = @error + 30
 			ExitLoop
 		EndIf
-		$aCall = DllCall('kernel32.dll', 'bool', 'ReadProcessMemory', 'handle', $hProcess, _
+		$aRet = DllCall('kernel32.dll', 'bool', 'ReadProcessMemory', 'handle', $hProcess, _
 				'ptr', DllStructGetData($tPBI, 'PebBaseAddress'), 'struct*', $tPEB, _
 				'ulong_ptr', DllStructGetSize($tPEB), 'ulong_ptr*', 0)
-		If @error Or Not $aCall[0] Or (Not $aCall[5]) Then
+		If @error Or Not $aRet[0] Or (Not $aRet[5]) Then
 			$iError = @error + 40
 			ExitLoop
 		EndIf
-		$aCall = DllCall('kernel32.dll', 'bool', 'ReadProcessMemory', 'handle', $hProcess, _
+		$aRet = DllCall('kernel32.dll', 'bool', 'ReadProcessMemory', 'handle', $hProcess, _
 				'ptr', DllStructGetData($tPEB, 'ProcessParameters'), 'struct*', $tUPP, _
 				'ulong_ptr', DllStructGetSize($tUPP), 'ulong_ptr*', 0)
-		If @error Or Not $aCall[0] Or (Not $aCall[5]) Then
+		If @error Or Not $aRet[0] Or (Not $aRet[5]) Then
 			$iError = @error + 50
 			ExitLoop
 		EndIf
@@ -813,10 +670,10 @@ Func _WinAPI_GetProcessCommandLine($iPID = 0)
 			$iError = @error + 60
 			ExitLoop
 		EndIf
-		$aCall = DllCall('kernel32.dll', 'bool', 'ReadProcessMemory', 'handle', $hProcess, _
+		$aRet = DllCall('kernel32.dll', 'bool', 'ReadProcessMemory', 'handle', $hProcess, _
 				'ptr', DllStructGetData($tUPP, 'CommandLine'), 'struct*', $tCMD, _
 				'ulong_ptr', DllStructGetSize($tCMD), 'ulong_ptr*', 0)
-		If @error Or Not $aCall[0] Or (Not $aCall[5]) Then
+		If @error Or Not $aRet[0] Or (Not $aRet[5]) Then
 			$iError = @error + 70
 			ExitLoop
 		EndIf
@@ -834,7 +691,7 @@ EndFunc   ;==>_WinAPI_GetProcessCommandLine
 Func _WinAPI_GetProcessFileName($iPID = 0)
 	If Not $iPID Then $iPID = @AutoItPID
 
-	Local $hProcess = DllCall('kernel32.dll', 'handle', 'OpenProcess', 'dword', ((_WinAPI_GetVersion() < 6.0) ? 0x00000410 : 0x00001010), _
+	Local $hProcess = DllCall('kernel32.dll', 'handle', 'OpenProcess', 'dword', __Iif($__WINVER < 0x0600, 0x00000410, 0x00001010), _
 			'bool', 0, 'dword', $iPID)
 	If @error Or Not $hProcess[0] Then Return SetError(@error + 20, @extended, '')
 
@@ -854,14 +711,14 @@ EndFunc   ;==>_WinAPI_GetProcessFileName
 Func _WinAPI_GetProcessHandleCount($iPID = 0)
 	If Not $iPID Then $iPID = @AutoItPID
 
-	Local $hProcess = DllCall('kernel32.dll', 'handle', 'OpenProcess', 'dword', ((_WinAPI_GetVersion() < 6.0) ? 0x00000400 : 0x00001000), _
+	Local $hProcess = DllCall('kernel32.dll', 'handle', 'OpenProcess', 'dword', __Iif($__WINVER < 0x0600, 0x00000400, 0x00001000), _
 			'bool', 0, 'dword', $iPID)
 	If @error Or Not $hProcess[0] Then Return SetError(@error + 20, @extended, 0)
 
-	Local $aCall = DllCall('kernel32.dll', 'bool', 'GetProcessHandleCount', 'handle', $hProcess[0], 'dword*', 0)
-	If __CheckErrorCloseHandle($aCall, $hProcess[0]) Then Return SetError(@error, @extended, 0)
+	Local $aRet = DllCall('kernel32.dll', 'bool', 'GetProcessHandleCount', 'handle', $hProcess[0], 'dword*', 0)
+	If __CheckErrorCloseHandle($aRet, $hProcess[0]) Then Return SetError(@error, @extended, 0)
 
-	Return $aCall[2]
+	Return $aRet[2]
 EndFunc   ;==>_WinAPI_GetProcessHandleCount
 
 ; #FUNCTION# ====================================================================================================================
@@ -869,11 +726,11 @@ EndFunc   ;==>_WinAPI_GetProcessHandleCount
 ; Modified.......: Jpm
 ; ===============================================================================================================================
 Func _WinAPI_GetProcessID($hProcess)
-	Local $aCall = DllCall('kernel32.dll', 'dword', 'GetProcessId', 'handle', $hProcess)
+	Local $aRet = DllCall('kernel32.dll', 'dword', 'GetProcessId', 'handle', $hProcess)
 	If @error Then Return SetError(@error, @extended, 0)
-	; If Not $aCall[0] Then Return SetError(1000, 0, 0)
+	; If Not $aRet[0] Then Return SetError(1000, 0, 0)
 
-	Return $aCall[0]
+	Return $aRet[0]
 EndFunc   ;==>_WinAPI_GetProcessID
 
 ; #FUNCTION# ====================================================================================================================
@@ -883,19 +740,19 @@ EndFunc   ;==>_WinAPI_GetProcessID
 Func _WinAPI_GetProcessIoCounters($iPID = 0)
 	If Not $iPID Then $iPID = @AutoItPID
 
-	Local $hProcess = DllCall('kernel32.dll', 'handle', 'OpenProcess', 'dword', ((_WinAPI_GetVersion() < 6.0) ? 0x00000400 : 0x00001000), _
+	Local $hProcess = DllCall('kernel32.dll', 'handle', 'OpenProcess', 'dword', __Iif($__WINVER < 0x0600, 0x00000400, 0x00001000), _
 			'bool', 0, 'dword', $iPID)
 	If @error Or Not $hProcess[0] Then Return SetError(@error + 20, @extended, 0)
 
 	Local $tIO_COUNTERS = DllStructCreate('uint64[6]')
-	Local $aCall = DllCall('kernel32.dll', 'bool', 'GetProcessIoCounters', 'handle', $hProcess[0], 'struct*', $tIO_COUNTERS)
-	If __CheckErrorCloseHandle($aCall, $hProcess[0]) Then Return SetError(@error, @extended, 0)
+	Local $aRet = DllCall('kernel32.dll', 'bool', 'GetProcessIoCounters', 'handle', $hProcess[0], 'struct*', $tIO_COUNTERS)
+	If __CheckErrorCloseHandle($aRet, $hProcess[0]) Then Return SetError(@error, @extended, 0)
 
-	Local $aRet[6]
+	Local $aResult[6]
 	For $i = 0 To 5
-		$aRet[$i] = DllStructGetData($tIO_COUNTERS, 1, $i + 1)
+		$aResult[$i] = DllStructGetData($tIO_COUNTERS, 1, $i + 1)
 	Next
-	Return $aRet
+	Return $aResult
 EndFunc   ;==>_WinAPI_GetProcessIoCounters
 
 ; #FUNCTION# ====================================================================================================================
@@ -905,20 +762,20 @@ EndFunc   ;==>_WinAPI_GetProcessIoCounters
 Func _WinAPI_GetProcessMemoryInfo($iPID = 0)
 	If Not $iPID Then $iPID = @AutoItPID
 
-	Local $hProcess = DllCall('kernel32.dll', 'handle', 'OpenProcess', 'dword', ((_WinAPI_GetVersion() < 6.0) ? 0x00000410 : 0x00001010), _
+	Local $hProcess = DllCall('kernel32.dll', 'handle', 'OpenProcess', 'dword', __Iif($__WINVER < 0x0600, 0x00000410, 0x00001010), _
 			'bool', 0, 'dword', $iPID)
 	If @error Or Not $hProcess[0] Then Return SetError(@error + 20, @extended, 0)
 
 	Local $tPMC_EX = DllStructCreate('dword;dword;ulong_ptr;ulong_ptr;ulong_ptr;ulong_ptr;ulong_ptr;ulong_ptr;ulong_ptr;ulong_ptr;ulong_ptr')
-	Local $aCall = DllCall(@SystemDir & '\psapi.dll', 'bool', 'GetProcessMemoryInfo', 'handle', $hProcess[0], 'struct*', $tPMC_EX, _
+	Local $aRet = DllCall(@SystemDir & '\psapi.dll', 'bool', 'GetProcessMemoryInfo', 'handle', $hProcess[0], 'struct*', $tPMC_EX, _
 			'int', DllStructGetSize($tPMC_EX))
-	If __CheckErrorCloseHandle($aCall, $hProcess[0]) Then Return SetError(@error, @extended, 0)
+	If __CheckErrorCloseHandle($aRet, $hProcess[0]) Then Return SetError(@error, @extended, 0)
 
-	Local $aRet[10]
+	Local $aResult[10]
 	For $i = 0 To 9
-		$aRet[$i] = DllStructGetData($tPMC_EX, $i + 2)
+		$aResult[$i] = DllStructGetData($tPMC_EX, $i + 2)
 	Next
-	Return $aRet
+	Return $aResult
 EndFunc   ;==>_WinAPI_GetProcessMemoryInfo
 
 ; #FUNCTION# ====================================================================================================================
@@ -934,18 +791,18 @@ Func _WinAPI_GetProcessName($iPID = 0)
 	$hSnapshot = $hSnapshot[0]
 	Local $tPROCESSENTRY32 = DllStructCreate($tagPROCESSENTRY32)
 	DllStructSetData($tPROCESSENTRY32, 'Size', DllStructGetSize($tPROCESSENTRY32))
-	Local $aCall = DllCall('kernel32.dll', 'bool', 'Process32FirstW', 'handle', $hSnapshot, 'struct*', $tPROCESSENTRY32)
+	Local $aRet = DllCall('kernel32.dll', 'bool', 'Process32FirstW', 'handle', $hSnapshot, 'struct*', $tPROCESSENTRY32)
 	Local $iError = @error
-	While (Not @error) And ($aCall[0])
+	While (Not @error) And ($aRet[0])
 		If DllStructGetData($tPROCESSENTRY32, 'ProcessID') = $iPID Then
 			ExitLoop
 		EndIf
-		$aCall = DllCall('kernel32.dll', 'bool', 'Process32NextW', 'handle', $hSnapshot, 'struct*', $tPROCESSENTRY32)
+		$aRet = DllCall('kernel32.dll', 'bool', 'Process32NextW', 'handle', $hSnapshot, 'struct*', $tPROCESSENTRY32)
 		$iError = @error
 	WEnd
 	DllCall("kernel32.dll", "bool", "CloseHandle", "handle", $hSnapshot)
 	If $iError Then Return SetError($iError, 0, '')
-	If Not $aCall[0] Then SetError(10, 0, '')
+	If Not $aRet[0] Then SetError(10, 0, '')
 
 	Return DllStructGetData($tPROCESSENTRY32, 'ExeFile')
 EndFunc   ;==>_WinAPI_GetProcessName
@@ -957,20 +814,20 @@ EndFunc   ;==>_WinAPI_GetProcessName
 Func _WinAPI_GetProcessTimes($iPID = 0)
 	If Not $iPID Then $iPID = @AutoItPID
 
-	Local $hProcess = DllCall('kernel32.dll', 'handle', 'OpenProcess', 'dword', ((_WinAPI_GetVersion() < 6.0) ? 0x00000400 : 0x00001000), _
+	Local $hProcess = DllCall('kernel32.dll', 'handle', 'OpenProcess', 'dword', __Iif($__WINVER < 0x0600, 0x00000400, 0x00001000), _
 			'bool', 0, 'dword', $iPID)
 	If @error Or Not $hProcess[0] Then Return SetError(@error + 20, @extended, 0)
 
 	Local $tFILETIME = DllStructCreate($tagFILETIME)
-	Local $aCall = DllCall('kernel32.dll', 'bool', 'GetProcessTimes', 'handle', $hProcess[0], 'struct*', $tFILETIME, 'uint64*', 0, _
+	Local $aRet = DllCall('kernel32.dll', 'bool', 'GetProcessTimes', 'handle', $hProcess[0], 'struct*', $tFILETIME, 'uint64*', 0, _
 			'uint64*', 0, 'uint64*', 0)
-	If __CheckErrorCloseHandle($aCall, $hProcess[0]) Then Return SetError(@error, @extended, 0)
+	If __CheckErrorCloseHandle($aRet, $hProcess[0]) Then Return SetError(@error, @extended, 0)
 
-	Local $aRet[3]
-	$aRet[0] = $tFILETIME
-	$aRet[1] = $aCall[4]
-	$aRet[2] = $aCall[5]
-	Return $aRet
+	Local $aResult[3]
+	$aResult[0] = $tFILETIME
+	$aResult[1] = $aRet[4]
+	$aResult[2] = $aRet[5]
+	Return $aResult
 EndFunc   ;==>_WinAPI_GetProcessTimes
 
 ; #FUNCTION# ====================================================================================================================
@@ -980,10 +837,10 @@ EndFunc   ;==>_WinAPI_GetProcessTimes
 Func _WinAPI_GetProcessUser($iPID = 0)
 	If Not $iPID Then $iPID = @AutoItPID
 
-	Local $tSID, $hToken, $aCall
+	Local $tSID, $hToken, $aRet
 	Local $iError = 0
 
-	Local $hProcess = DllCall('kernel32.dll', 'handle', 'OpenProcess', 'dword', ((_WinAPI_GetVersion() < 6.0) ? 0x00000400 : 0x00001000), _
+	Local $hProcess = DllCall('kernel32.dll', 'handle', 'OpenProcess', 'dword', __Iif($__WINVER < 0x0600, 0x00000400, 0x00001000), _
 			'bool', 0, 'dword', $iPID)
 	If @error Or Not $hProcess[0] Then Return SetError(@error + 20, @extended, 0)
 
@@ -994,15 +851,15 @@ Func _WinAPI_GetProcessUser($iPID = 0)
 			ExitLoop
 		EndIf
 		$tSID = DllStructCreate('ptr;byte[1024]')
-		$aCall = DllCall('advapi32.dll', 'bool', 'GetTokenInformation', 'handle', $hToken, 'uint', 1, 'struct*', $tSID, _
+		$aRet = DllCall('advapi32.dll', 'bool', 'GetTokenInformation', 'handle', $hToken, 'uint', 1, 'struct*', $tSID, _
 				'dword', DllStructGetSize($tSID), 'dword*', 0)
-		If @error Or Not $aCall[0] Then
+		If @error Or Not $aRet[0] Then
 			$iError = @error + 30
 			ExitLoop
 		EndIf
-		$aCall = DllCall('advapi32.dll', 'bool', 'LookupAccountSidW', 'ptr', 0, 'ptr', DllStructGetData($tSID, 1), 'wstr', '', _
+		$aRet = DllCall('advapi32.dll', 'bool', 'LookupAccountSidW', 'ptr', 0, 'ptr', DllStructGetData($tSID, 1), 'wstr', '', _
 				'dword*', 2048, 'wstr', '', 'dword*', 2048, 'uint*', 0)
-		If @error Or Not $aCall[0] Then
+		If @error Or Not $aRet[0] Then
 			$iError = @error + 40
 			ExitLoop
 		EndIf
@@ -1013,10 +870,10 @@ Func _WinAPI_GetProcessUser($iPID = 0)
 	DllCall("kernel32.dll", "bool", "CloseHandle", "handle", $hProcess[0])
 	If $iError Then Return SetError($iError, 0, 0)
 
-	Local $aRet[2]
-	$aRet[0] = $aCall[3]
-	$aRet[1] = $aCall[5]
-	Return $aRet
+	Local $aResult[2]
+	$aResult[0] = $aRet[3]
+	$aResult[1] = $aRet[5]
+	Return $aResult
 EndFunc   ;==>_WinAPI_GetProcessUser
 
 ; #FUNCTION# ====================================================================================================================
@@ -1026,9 +883,9 @@ EndFunc   ;==>_WinAPI_GetProcessUser
 Func _WinAPI_GetProcessWorkingDirectory($iPID = 0)
 	If Not $iPID Then $iPID = @AutoItPID
 
-	Local $aCall, $iError = 0
+	Local $aRet, $iError = 0
 
-	Local $hProcess = DllCall('kernel32.dll', 'handle', 'OpenProcess', 'dword', ((_WinAPI_GetVersion() < 6.0) ? 0x00000410 : 0x00001010), 'bool', 0, 'dword', $iPID)
+	Local $hProcess = DllCall('kernel32.dll', 'handle', 'OpenProcess', 'dword', __Iif($__WINVER < 0x0600, 0x00000410, 0x00001010), 'bool', 0, 'dword', $iPID)
 	If @error Or Not $hProcess[0] Then Return SetError(@error + 20, @extended, '')
 
 	$hProcess = $hProcess[0]
@@ -1039,23 +896,23 @@ Func _WinAPI_GetProcessWorkingDirectory($iPID = 0)
 	Local $tDIR
 
 	Do
-		$aCall = DllCall('ntdll.dll', 'long', 'NtQueryInformationProcess', 'handle', $hProcess, 'ulong', 0, 'struct*', $tPBI, _
+		$aRet = DllCall('ntdll.dll', 'long', 'NtQueryInformationProcess', 'handle', $hProcess, 'ulong', 0, 'struct*', $tPBI, _
 				'ulong', DllStructGetSize($tPBI), 'ulong*', 0)
-		If @error Or ($aCall[0]) Then
+		If @error Or ($aRet[0]) Then
 			$iError = @error + 10
 			ExitLoop
 		EndIf
-		$aCall = DllCall('kernel32.dll', 'bool', 'ReadProcessMemory', 'handle', $hProcess, _
+		$aRet = DllCall('kernel32.dll', 'bool', 'ReadProcessMemory', 'handle', $hProcess, _
 				'ptr', DllStructGetData($tPBI, 'PebBaseAddress'), 'struct*', $tPEB, _
 				'ulong_ptr', DllStructGetSize($tPEB), 'ulong_ptr*', 0)
-		If @error Or (Not $aCall[0]) Or (Not $aCall[5]) Then
+		If @error Or (Not $aRet[0]) Or (Not $aRet[5]) Then
 			$iError = @error + 30
 			ExitLoop
 		EndIf
-		$aCall = DllCall('kernel32.dll', 'bool', 'ReadProcessMemory', 'handle', $hProcess, _
+		$aRet = DllCall('kernel32.dll', 'bool', 'ReadProcessMemory', 'handle', $hProcess, _
 				'ptr', DllStructGetData($tPEB, 'ProcessParameters'), 'struct*', $tUPP, _
 				'ulong_ptr', DllStructGetSize($tUPP), 'ulong_ptr*', 0)
-		If @error Or (Not $aCall[0]) Or (Not $aCall[5]) Then
+		If @error Or (Not $aRet[0]) Or (Not $aRet[5]) Then
 			$iError = @error + 40
 			ExitLoop
 		EndIf
@@ -1064,10 +921,10 @@ Func _WinAPI_GetProcessWorkingDirectory($iPID = 0)
 			$iError = @error + 50
 			ExitLoop
 		EndIf
-		$aCall = DllCall('kernel32.dll', 'bool', 'ReadProcessMemory', 'handle', $hProcess, _
+		$aRet = DllCall('kernel32.dll', 'bool', 'ReadProcessMemory', 'handle', $hProcess, _
 				'ptr', DllStructGetData($tUPP, 'CurrentDirectory'), 'struct*', $tDIR, _
 				'ulong_ptr', DllStructGetSize($tDIR), 'ulong_ptr*', 0)
-		If @error Or (Not $aCall[0]) Or (Not $aCall[5]) Then
+		If @error Or (Not $aRet[0]) Or (Not $aRet[5]) Then
 			$iError = @error + 60
 			ExitLoop
 		EndIf
@@ -1084,11 +941,11 @@ EndFunc   ;==>_WinAPI_GetProcessWorkingDirectory
 ; Modified.......: Jpm
 ; ===============================================================================================================================
 Func _WinAPI_GetThreadDesktop($iThreadId)
-	Local $aCall = DllCall('user32.dll', 'handle', 'GetThreadDesktop', 'dword', $iThreadId)
+	Local $aRet = DllCall('user32.dll', 'handle', 'GetThreadDesktop', 'dword', $iThreadId)
 	If @error Then Return SetError(@error, @extended, 0)
-	; If Not $aCall[0] Then Return SetError(1000, 0, 0)
+	; If Not $aRet[0] Then Return SetError(1000, 0, 0)
 
-	Return $aCall[0]
+	Return $aRet[0]
 EndFunc   ;==>_WinAPI_GetThreadDesktop
 
 ; #FUNCTION# ====================================================================================================================
@@ -1096,10 +953,10 @@ EndFunc   ;==>_WinAPI_GetThreadDesktop
 ; Modified.......: jpm
 ; ===============================================================================================================================
 Func _WinAPI_GetThreadErrorMode()
-	Local $aCall = DllCall('kernel32.dll', 'dword', 'GetThreadErrorMode')
+	Local $aRet = DllCall('kernel32.dll', 'dword', 'GetThreadErrorMode')
 	If @error Then Return SetError(@error, @extended, 0)
 
-	Return $aCall[0]
+	Return $aRet[0]
 EndFunc   ;==>_WinAPI_GetThreadErrorMode
 
 ; #FUNCTION# ====================================================================================================================
@@ -1109,10 +966,10 @@ EndFunc   ;==>_WinAPI_GetThreadErrorMode
 Func _WinAPI_GetWindowFileName($hWnd)
 	Local $iPID = 0
 
-	Local $aCall = DllCall("user32.dll", "bool", "IsWindow", "hwnd", $hWnd)
-	If $aCall[0] Then
-		$aCall = DllCall("user32.dll", "dword", "GetWindowThreadProcessId", "hwnd", $hWnd, "dword*", 0)
-		$iPID = $aCall[2]
+	Local $aResult = DllCall("user32.dll", "bool", "IsWindow", "hwnd", $hWnd)
+	If $aResult[0] Then
+		$aResult = DllCall("user32.dll", "dword", "GetWindowThreadProcessId", "hwnd", $hWnd, "dword*", 0)
+		$iPID = $aResult[2]
 	EndIf
 	If Not $iPID Then Return SetError(1, 0, '')
 
@@ -1127,22 +984,22 @@ EndFunc   ;==>_WinAPI_GetWindowFileName
 ; Modified.......: jpm
 ; ===============================================================================================================================
 Func _WinAPI_IsElevated()
-	Local $iElev, $aCall, $iError = 0
+	Local $iElev, $aRet, $iError = 0
 
 	Local $hToken = _WinAPI_OpenProcessToken(0x0008)
 	If Not $hToken Then Return SetError(@error + 10, @extended, False)
 
 	Do
-		$aCall = DllCall('advapi32.dll', 'bool', 'GetTokenInformation', 'handle', $hToken, 'uint', 20, 'uint*', 0, 'dword', 4, _
+		$aRet = DllCall('advapi32.dll', 'bool', 'GetTokenInformation', 'handle', $hToken, 'uint', 20, 'uint*', 0, 'dword', 4, _
 				'dword*', 0) ; TOKEN_ELEVATION
-		If @error Or Not $aCall[0] Then
+		If @error Or Not $aRet[0] Then
 			$iError = @error + 10
 			ExitLoop
 		EndIf
-		$iElev = $aCall[3]
-		$aCall = DllCall('advapi32.dll', 'bool', 'GetTokenInformation', 'handle', $hToken, 'uint', 18, 'uint*', 0, 'dword', 4, _
+		$iElev = $aRet[3]
+		$aRet = DllCall('advapi32.dll', 'bool', 'GetTokenInformation', 'handle', $hToken, 'uint', 18, 'uint*', 0, 'dword', 4, _
 				'dword*', 0) ; TOKEN_ELEVATION_TYPE
-		If @error Or Not $aCall[0] Then
+		If @error Or Not $aRet[0] Then
 			$iError = @error + 20
 			ExitLoop
 		EndIf
@@ -1150,7 +1007,7 @@ Func _WinAPI_IsElevated()
 	DllCall("kernel32.dll", "bool", "CloseHandle", "handle", $hToken)
 	If $iError Then Return SetError($iError, 0, False)
 
-	Return SetExtended($aCall[0] - 1, $iElev)
+	Return SetExtended($aRet[0] - 1, $iElev)
 EndFunc   ;==>_WinAPI_IsElevated
 
 ; #FUNCTION# ====================================================================================================================
@@ -1158,11 +1015,11 @@ EndFunc   ;==>_WinAPI_IsElevated
 ; Modified.......: Jpm
 ; ===============================================================================================================================
 Func _WinAPI_IsProcessInJob($hProcess, $hJob = 0)
-	Local $aCall = DllCall('kernel32.dll', 'bool', 'IsProcessInJob', 'handle', $hProcess, 'handle', $hJob, 'bool*', 0)
-	If @error Or Not $aCall[0] Then Return SetError(@error, @extended, False)
-	; If Not $aCall[0] Then Return SetError(1000, 0, 0)
+	Local $aRet = DllCall('kernel32.dll', 'bool', 'IsProcessInJob', 'handle', $hProcess, 'handle', $hJob, 'bool*', 0)
+	If @error Or Not $aRet[0] Then Return SetError(@error, @extended, False)
+	; If Not $aRet[0] Then Return SetError(1000, 0, 0)
 
-	Return $aCall[3]
+	Return $aRet[3]
 EndFunc   ;==>_WinAPI_IsProcessInJob
 
 ; #FUNCTION# ====================================================================================================================
@@ -1170,11 +1027,11 @@ EndFunc   ;==>_WinAPI_IsProcessInJob
 ; Modified.......: Jpm
 ; ===============================================================================================================================
 Func _WinAPI_OpenJobObject($sName, $iAccess = $JOB_OBJECT_ALL_ACCESS, $bInherit = False)
-	Local $aCall = DllCall('kernel32.dll', 'handle', 'OpenJobObjectW', 'dword', $iAccess, 'bool', $bInherit, 'wstr', $sName)
+	Local $aRet = DllCall('kernel32.dll', 'handle', 'OpenJobObjectW', 'dword', $iAccess, 'bool', $bInherit, 'wstr', $sName)
 	If @error Then Return SetError(@error, @extended, 0)
-	; If Not $aCall[0] Then Return SetError(1000, 0, 0)
+	; If Not $aRet[0] Then Return SetError(1000, 0, 0)
 
-	Return $aCall[0]
+	Return $aRet[0]
 EndFunc   ;==>_WinAPI_OpenJobObject
 
 ; #FUNCTION# ====================================================================================================================
@@ -1182,51 +1039,12 @@ EndFunc   ;==>_WinAPI_OpenJobObject
 ; Modified.......: Jpm
 ; ===============================================================================================================================
 Func _WinAPI_OpenMutex($sMutex, $iAccess = $MUTEX_ALL_ACCESS, $bInherit = False)
-	Local $aCall = DllCall('kernel32.dll', 'handle', 'OpenMutexW', 'dword', $iAccess, 'bool', $bInherit, 'wstr', $sMutex)
+	Local $aRet = DllCall('kernel32.dll', 'handle', 'OpenMutexW', 'dword', $iAccess, 'bool', $bInherit, 'wstr', $sMutex)
 	If @error Then Return SetError(@error, @extended, 0)
-	; If Not $aCall[0] Then Return SetError(1000, 0, 0)
+	; If Not $aRet[0] Then Return SetError(1000, 0, 0)
 
-	Return $aCall[0]
+	Return $aRet[0]
 EndFunc   ;==>_WinAPI_OpenMutex
-
-; #FUNCTION# ====================================================================================================================
-; Author ........: Paul Campbell (PaulIA)
-; Modified.......: jpm
-; ===============================================================================================================================
-Func _WinAPI_OpenProcess($iAccess, $bInherit, $iPID, $bDebugPriv = False)
-	; Attempt to open process with standard security priviliges
-	Local $aCall = DllCall("kernel32.dll", "handle", "OpenProcess", "dword", $iAccess, "bool", $bInherit, "dword", $iPID)
-	If @error Then Return SetError(@error, @extended, 0)
-	If $aCall[0] Then Return $aCall[0]
-	If Not $bDebugPriv Then Return SetError(100, 0, 0)
-
-	; Enable debug privileged mode
-	Local $hToken = _Security__OpenThreadTokenEx(BitOR($TOKEN_ADJUST_PRIVILEGES, $TOKEN_QUERY))
-	If @error Then Return SetError(@error + 10, @extended, 0)
-	_Security__SetPrivilege($hToken, $SE_DEBUG_NAME, True)
-	Local $iError = @error
-	Local $iExtended = @extended
-	Local $iRet = 0
-	If Not @error Then
-		; Attempt to open process with debug privileges
-		$aCall = DllCall("kernel32.dll", "handle", "OpenProcess", "dword", $iAccess, "bool", $bInherit, "dword", $iPID)
-		$iError = @error
-		$iExtended = @extended
-		If $aCall[0] Then $iRet = $aCall[0]
-
-		; Disable debug privileged mode
-		_Security__SetPrivilege($hToken, $SE_DEBUG_NAME, False)
-		If @error Then
-			$iError = @error + 20
-			$iExtended = @extended
-		EndIf
-	Else
-		$iError = @error + 30 ; SeDebugPrivilege=True error
-	EndIf
-	DllCall("kernel32.dll", "bool", "CloseHandle", "handle", $hToken)
-
-	Return SetError($iError, $iExtended, $iRet)
-EndFunc   ;==>_WinAPI_OpenProcess
 
 ; #FUNCTION# ====================================================================================================================
 ; Author.........: Yashied
@@ -1238,11 +1056,11 @@ Func _WinAPI_OpenProcessToken($iAccess, $hProcess = 0)
 		$hProcess = $hProcess[0]
 	EndIf
 
-	Local $aCall = DllCall('advapi32.dll', 'bool', 'OpenProcessToken', 'handle', $hProcess, 'dword', $iAccess, 'handle*', 0)
-	If @error Or Not $aCall[0] Then Return SetError(@error, @extended, 0)
-	; If Not $aCall[0] Then Return SetError(1000, 0, 0)
+	Local $aRet = DllCall('advapi32.dll', 'bool', 'OpenProcessToken', 'handle', $hProcess, 'dword', $iAccess, 'handle*', 0)
+	If @error Or Not $aRet[0] Then Return SetError(@error, @extended, 0)
+	; If Not $aRet[0] Then Return SetError(1000, 0, 0)
 
-	Return $aCall[3]
+	Return $aRet[3]
 EndFunc   ;==>_WinAPI_OpenProcessToken
 
 ; #FUNCTION# ====================================================================================================================
@@ -1250,11 +1068,11 @@ EndFunc   ;==>_WinAPI_OpenProcessToken
 ; Modified.......: Jpm
 ; ===============================================================================================================================
 Func _WinAPI_OpenSemaphore($sSemaphore, $iAccess = 0x001F0003, $bInherit = False)
-	Local $aCall = DllCall('kernel32.dll', 'handle', 'OpenSemaphoreW', 'dword', $iAccess, 'bool', $bInherit, 'wstr', $sSemaphore)
+	Local $aRet = DllCall('kernel32.dll', 'handle', 'OpenSemaphoreW', 'dword', $iAccess, 'bool', $bInherit, 'wstr', $sSemaphore)
 	If @error Then Return SetError(@error, @extended, 0)
-	; If Not $aCall[0] Then Return SetError(1000, 0, 0)
+	; If Not $aRet[0] Then Return SetError(1000, 0, 0)
 
-	Return $aCall[0]
+	Return $aRet[0]
 EndFunc   ;==>_WinAPI_OpenSemaphore
 
 ; #FUNCTION# ====================================================================================================================
@@ -1262,12 +1080,12 @@ EndFunc   ;==>_WinAPI_OpenSemaphore
 ; Modified.......: Jpm
 ; ===============================================================================================================================
 Func _WinAPI_QueryInformationJobObject($hJob, $iJobObjectInfoClass, ByRef $tJobObjectInfo)
-	Local $aCall = DllCall('kernel32.dll', 'bool', 'QueryInformationJobObject', 'handle', $hJob, 'int', $iJobObjectInfoClass, _
+	Local $aRet = DllCall('kernel32.dll', 'bool', 'QueryInformationJobObject', 'handle', $hJob, 'int', $iJobObjectInfoClass, _
 			'struct*', $tJobObjectInfo, 'dword', DllStructGetSize($tJobObjectInfo), 'dword*', 0)
-	If @error Or Not $aCall[0] Then Return SetError(@error, @extended, 0)
-	; If Not $aCall[0] Then Return SetError(1000, 0, 0)
+	If @error Or Not $aRet[0] Then Return SetError(@error, @extended, 0)
+	; If Not $aRet[0] Then Return SetError(1000, 0, 0)
 
-	Return $aCall[5]
+	Return $aRet[5]
 EndFunc   ;==>_WinAPI_QueryInformationJobObject
 
 ; #FUNCTION# ====================================================================================================================
@@ -1275,11 +1093,11 @@ EndFunc   ;==>_WinAPI_QueryInformationJobObject
 ; Modified.......: Jpm
 ; ===============================================================================================================================
 Func _WinAPI_ReleaseMutex($hMutex)
-	Local $aCall = DllCall('kernel32.dll', 'bool', 'ReleaseMutex', 'handle', $hMutex)
+	Local $aRet = DllCall('kernel32.dll', 'bool', 'ReleaseMutex', 'handle', $hMutex)
 	If @error Then Return SetError(@error, @extended, 0)
-	; If Not $aCall[0] Then Return SetError(1000, 0, 0)
+	; If Not $aRet[0] Then Return SetError(1000, 0, 0)
 
-	Return $aCall[0]
+	Return $aRet[0]
 EndFunc   ;==>_WinAPI_ReleaseMutex
 
 ; #FUNCTION# ====================================================================================================================
@@ -1287,10 +1105,10 @@ EndFunc   ;==>_WinAPI_ReleaseMutex
 ; Modified.......: Jpm
 ; ===============================================================================================================================
 Func _WinAPI_ReleaseSemaphore($hSemaphore, $iIncrease = 1)
-	Local $aCall = DllCall('kernel32.dll', 'bool', 'ReleaseSemaphore', 'handle', $hSemaphore, 'long', $iIncrease, 'long*', 0)
-	If @error Or Not $aCall[0] Then Return SetError(@error + 10, @extended, 0)
+	Local $aRet = DllCall('kernel32.dll', 'bool', 'ReleaseSemaphore', 'handle', $hSemaphore, 'long', $iIncrease, 'long*', 0)
+	If @error Or Not $aRet[0] Then Return SetError(@error + 10, @extended, 0)
 
-	Return $aCall[3]
+	Return $aRet[3]
 EndFunc   ;==>_WinAPI_ReleaseSemaphore
 
 ; #FUNCTION# ====================================================================================================================
@@ -1298,35 +1116,24 @@ EndFunc   ;==>_WinAPI_ReleaseSemaphore
 ; Modified.......: Jpm
 ; ===============================================================================================================================
 Func _WinAPI_ResetEvent($hEvent)
-	Local $aCall = DllCall('kernel32.dll', 'bool', 'ResetEvent', 'handle', $hEvent)
+	Local $aRet = DllCall('kernel32.dll', 'bool', 'ResetEvent', 'handle', $hEvent)
 	If @error Then Return SetError(@error, @extended, 0)
-	; If Not $aCall[0] Then Return SetError(1000, 0, 0)
+	; If Not $aRet[0] Then Return SetError(1000, 0, 0)
 
-	Return $aCall[0]
+	Return $aRet[0]
 EndFunc   ;==>_WinAPI_ResetEvent
-
-; #FUNCTION# ====================================================================================================================
-; Author ........: Paul Campbell (PaulIA)
-; Modified.......:
-; ===============================================================================================================================
-Func _WinAPI_SetEvent($hEvent)
-	Local $aCall = DllCall("kernel32.dll", "bool", "SetEvent", "handle", $hEvent)
-	If @error Then Return SetError(@error, @extended, False)
-
-	Return $aCall[0]
-EndFunc   ;==>_WinAPI_SetEvent
 
 ; #FUNCTION# ====================================================================================================================
 ; Author.........: Yashied
 ; Modified.......: Jpm
 ; ===============================================================================================================================
 Func _WinAPI_SetInformationJobObject($hJob, $iJobObjectInfoClass, $tJobObjectInfo)
-	Local $aCall = DllCall('kernel32.dll', 'bool', 'SetInformationJobObject', 'handle', $hJob, 'int', $iJobObjectInfoClass, _
+	Local $aRet = DllCall('kernel32.dll', 'bool', 'SetInformationJobObject', 'handle', $hJob, 'int', $iJobObjectInfoClass, _
 			'struct*', $tJobObjectInfo, 'dword', DllStructGetSize($tJobObjectInfo))
 	If @error Then Return SetError(@error, @extended, False)
-	; If Not $aCall[0] Then Return SetError(1000, 0, 0)
+	; If Not $aRet[0] Then Return SetError(1000, 0, 0)
 
-	Return $aCall[0]
+	Return $aRet[0]
 EndFunc   ;==>_WinAPI_SetInformationJobObject
 
 ; #FUNCTION# ====================================================================================================================
@@ -1336,41 +1143,30 @@ EndFunc   ;==>_WinAPI_SetInformationJobObject
 Func _WinAPI_SetPriorityClass($iPriority, $iPID = 0)
 	If Not $iPID Then $iPID = @AutoItPID
 
-	Local $hProcess = DllCall('kernel32.dll', 'handle', 'OpenProcess', 'dword', ((_WinAPI_GetVersion() < 6.0) ? 0x00000600 : 0x00001200), _
+	Local $hProcess = DllCall('kernel32.dll', 'handle', 'OpenProcess', 'dword', __Iif($__WINVER < 0x0600, 0x00000600, 0x00001200), _
 			'bool', 0, 'dword', $iPID)
 	If @error Or Not $hProcess[0] Then Return SetError(@error + 10, @extended, 0)
 	; If Not $hProcess[0] Then Return SetError(1000, 0, 0)
 
 	Local $iError = 0
-	Local $aCall = DllCall('kernel32.dll', 'bool', 'SetPriorityClass', 'handle', $hProcess[0], 'dword', $iPriority)
+	Local $aRet = DllCall('kernel32.dll', 'bool', 'SetPriorityClass', 'handle', $hProcess[0], 'dword', $iPriority)
 	If @error Then $iError = @error
 	DllCall("kernel32.dll", "bool", "CloseHandle", "handle", $hProcess[0])
 	If $iError Then Return SetError($iError, 0, 0)
 
-	Return $aCall[0]
+	Return $aRet[0]
 EndFunc   ;==>_WinAPI_SetPriorityClass
-
-; #FUNCTION# ====================================================================================================================
-; Author ........: Paul Campbell (PaulIA)
-; Modified.......: jpm
-; ===============================================================================================================================
-Func _WinAPI_SetProcessAffinityMask($hProcess, $iMask)
-	Local $aCall = DllCall("kernel32.dll", "bool", "SetProcessAffinityMask", "handle", $hProcess, "ulong_ptr", $iMask)
-	If @error Then Return SetError(@error, @extended, False)
-
-	Return $aCall[0]
-EndFunc   ;==>_WinAPI_SetProcessAffinityMask
 
 ; #FUNCTION# ====================================================================================================================
 ; Author.........: Yashied
 ; Modified.......: Jpm
 ; ===============================================================================================================================
 Func _WinAPI_SetThreadDesktop($hDesktop)
-	Local $aCall = DllCall('user32.dll', 'bool', 'SetThreadDesktop', 'handle', $hDesktop)
+	Local $aRet = DllCall('user32.dll', 'bool', 'SetThreadDesktop', 'handle', $hDesktop)
 	If @error Then Return SetError(@error, @extended, False)
-	; If Not $aCall[0] Then Return SetError(1000, 0, 0)
+	; If Not $aRet[0] Then Return SetError(1000, 0, 0)
 
-	Return $aCall[0]
+	Return $aRet[0]
 EndFunc   ;==>_WinAPI_SetThreadDesktop
 
 ; #FUNCTION# ====================================================================================================================
@@ -1378,10 +1174,10 @@ EndFunc   ;==>_WinAPI_SetThreadDesktop
 ; Modified.......: jpm
 ; ===============================================================================================================================
 Func _WinAPI_SetThreadErrorMode($iMode)
-	Local $aCall = DllCall('kernel32.dll', 'bool', 'SetThreadErrorMode', 'dword', $iMode, 'dword*', 0)
-	If @error Or Not $aCall[0] Then Return SetError(@error + 10, @extended, 0)
+	Local $aRet = DllCall('kernel32.dll', 'bool', 'SetThreadErrorMode', 'dword', $iMode, 'dword*', 0)
+	If @error Or Not $aRet[0] Then Return SetError(@error + 10, @extended, 0)
 
-	Return $aCall[2]
+	Return $aRet[2]
 EndFunc   ;==>_WinAPI_SetThreadErrorMode
 
 ; #FUNCTION# ====================================================================================================================
@@ -1389,11 +1185,11 @@ EndFunc   ;==>_WinAPI_SetThreadErrorMode
 ; Modified.......: Jpm
 ; ===============================================================================================================================
 Func _WinAPI_SetThreadExecutionState($iFlags)
-	Local $aCall = DllCall('kernel32.dll', 'dword', 'SetThreadExecutionState', 'dword', $iFlags)
+	Local $aRet = DllCall('kernel32.dll', 'dword', 'SetThreadExecutionState', 'dword', $iFlags)
 	If @error Then Return SetError(@error, @extended, 0)
-	; If Not $aCall[0] Then Return SetError(1000, 0, 0)
+	; If Not $aRet[0] Then Return SetError(1000, 0, 0)
 
-	Return $aCall[0]
+	Return $aRet[0]
 EndFunc   ;==>_WinAPI_SetThreadExecutionState
 
 ; #FUNCTION# ====================================================================================================================
@@ -1401,11 +1197,11 @@ EndFunc   ;==>_WinAPI_SetThreadExecutionState
 ; Modified.......: Jpm
 ; ===============================================================================================================================
 Func _WinAPI_TerminateJobObject($hJob, $iExitCode = 0)
-	Local $aCall = DllCall('kernel32.dll', 'bool', 'TerminateJobObject', 'handle', $hJob, 'uint', $iExitCode)
+	Local $aRet = DllCall('kernel32.dll', 'bool', 'TerminateJobObject', 'handle', $hJob, 'uint', $iExitCode)
 	If @error Then Return SetError(@error, @extended, 0)
-	; If Not $aCall[0] Then Return SetError(1000, 0, 0)
+	; If Not $aRet[0] Then Return SetError(1000, 0, 0)
 
-	Return $aCall[0]
+	Return $aRet[0]
 EndFunc   ;==>_WinAPI_TerminateJobObject
 
 ; #FUNCTION# ====================================================================================================================
@@ -1413,11 +1209,11 @@ EndFunc   ;==>_WinAPI_TerminateJobObject
 ; Modified.......: Jpm
 ; ===============================================================================================================================
 Func _WinAPI_TerminateProcess($hProcess, $iExitCode = 0)
-	Local $aCall = DllCall('kernel32.dll', 'bool', 'TerminateProcess', 'handle', $hProcess, 'uint', $iExitCode)
+	Local $aRet = DllCall('kernel32.dll', 'bool', 'TerminateProcess', 'handle', $hProcess, 'uint', $iExitCode)
 	If @error Then Return SetError(@error, @extended, 0)
-	; If Not $aCall[0] Then Return SetError(1000, 0, 0)
+	; If Not $aRet[0] Then Return SetError(1000, 0, 0)
 
-	Return $aCall[0]
+	Return $aRet[0]
 EndFunc   ;==>_WinAPI_TerminateProcess
 
 ; #FUNCTION# ====================================================================================================================
@@ -1425,56 +1221,11 @@ EndFunc   ;==>_WinAPI_TerminateProcess
 ; Modified.......: Jpm
 ; ===============================================================================================================================
 Func _WinAPI_UserHandleGrantAccess($hObject, $hJob, $bGrant)
-	Local $aCall = DllCall('kernel32.dll', 'bool', 'UserHandleGrantAccess', 'handle', $hObject, 'handle', $hJob, 'bool', $bGrant)
+	Local $aRet = DllCall('kernel32.dll', 'bool', 'UserHandleGrantAccess', 'handle', $hObject, 'handle', $hJob, 'bool', $bGrant)
 	If @error Then Return SetError(@error, @extended, False)
-	; If Not $aCall[0] Then Return SetError(1000, 0, 0)
+	; If Not $aRet[0] Then Return SetError(1000, 0, 0)
 
-	Return $aCall[0]
+	Return $aRet[0]
 EndFunc   ;==>_WinAPI_UserHandleGrantAccess
-
-; #FUNCTION# ====================================================================================================================
-; Author ........: Paul Campbell (PaulIA)
-; Modified.......:
-; ===============================================================================================================================
-Func _WinAPI_WaitForInputIdle($hProcess, $iTimeout = -1)
-	Local $aCall = DllCall("user32.dll", "dword", "WaitForInputIdle", "handle", $hProcess, "dword", $iTimeout)
-	If @error Then Return SetError(@error, @extended, False)
-
-	Return $aCall[0]
-EndFunc   ;==>_WinAPI_WaitForInputIdle
-
-; #FUNCTION# ====================================================================================================================
-; Author ........: Paul Campbell (PaulIA)
-; Modified.......: jpm
-; ===============================================================================================================================
-Func _WinAPI_WaitForMultipleObjects($iCount, $paHandles, $bWaitAll = False, $iTimeout = -1)
-	Local $aCall = DllCall("kernel32.dll", "INT", "WaitForMultipleObjects", "dword", $iCount, "struct*", $paHandles, "bool", $bWaitAll, "dword", $iTimeout)
-	If @error Then Return SetError(@error, @extended, -1)
-
-	Return $aCall[0]
-EndFunc   ;==>_WinAPI_WaitForMultipleObjects
-
-; #FUNCTION# ====================================================================================================================
-; Author ........: Paul Campbell (PaulIA)
-; Modified.......:
-; ===============================================================================================================================
-Func _WinAPI_WaitForSingleObject($hHandle, $iTimeout = -1)
-	Local $aCall = DllCall("kernel32.dll", "INT", "WaitForSingleObject", "handle", $hHandle, "dword", $iTimeout)
-	If @error Then Return SetError(@error, @extended, -1)
-
-	Return $aCall[0]
-EndFunc   ;==>_WinAPI_WaitForSingleObject
-
-; #FUNCTION# ====================================================================================================================
-; Author ........: Paul Campbell (PaulIA)
-; Modified.......:
-; ===============================================================================================================================
-Func _WinAPI_WriteConsole($hConsole, $sText)
-	Local $aCall = DllCall("kernel32.dll", "bool", "WriteConsoleW", "handle", $hConsole, "wstr", $sText, _
-			"dword", StringLen($sText), "dword*", 0, "ptr", 0)
-	If @error Then Return SetError(@error, @extended, False)
-
-	Return $aCall[0]
-EndFunc   ;==>_WinAPI_WriteConsole
 
 #EndRegion Public Functions

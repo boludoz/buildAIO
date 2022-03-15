@@ -5,13 +5,11 @@
 #include "SendMessage.au3"
 #include "StructureConstants.au3"
 #include "UDFGlobalID.au3"
-#include "WinAPIConv.au3"
-#include "WinAPIHObj.au3"
-#include "WinAPISysInternals.au3"
+#include "WinAPI.au3"
 
 ; #INDEX# =======================================================================================================================
 ; Title .........: ComboBox
-; AutoIt Version : 3.3.15.4
+; AutoIt Version : 3.3.14.2
 ; Language ......: English
 ; Description ...: Functions that assist with ComboBox control management.
 ; Author(s) .....: gafrost, PaulIA, Valik
@@ -322,7 +320,7 @@ Func _GUICtrlComboBox_GetCueBanner($hWnd)
 
 	Local $tText = DllStructCreate("wchar[4096]")
 	If _SendMessage($hWnd, $CB_GETCUEBANNER, $tText, 4096, 0, "struct*") <> 1 Then Return SetError(-1, 0, "")
-	Return DllStructGetData($tText, 1)
+	Return _WinAPI_WideCharToMultiByte($tText)
 EndFunc   ;==>_GUICtrlComboBox_GetCueBanner
 
 ; #FUNCTION# ====================================================================================================================

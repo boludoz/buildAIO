@@ -9,11 +9,11 @@ echo ############################################
 
 Setlocal EnableDelayedExpansion
 
-set "compile_files=MyBot.run,MyBot.run.MiniGui,MyBot.run.Watchdog,MyBot.run.Wmi,lib\ModLibs\Updater\AIOMod.Updater2"
+set "compile_files=MyBot.run,MyBot.run.MiniGui,MyBot.run.Watchdog,MyBot.run.Wmi,AIOMod.Updater"
 set "compile_ext=_stripped.au3,.exe"
 set "src=%cd%\"
 
-set compile_only=true
+set compile_only=false
 if "%1" EQU "compile_only" set compile_only=true
 if "%1" EQU "zip_only" goto :zip_only
 if "%1" EQU "retry" goto :retry
@@ -27,7 +27,8 @@ if !compile_only! NEQ true (
 				del "!file!"
 				If Exist "!file!" (
 					echo Error deleting !file!... STOP BUILD!!!
-					exit
+					::pause
+					exit /b 2
 				)
 			)
 		)
@@ -50,7 +51,9 @@ for %%i in (%compile_files%) do (
 		"build\aut2exe\aut2exe.exe" /in "%src%!file!_stripped.au3" /nopack /comp 2
 	)
 	If Not Exist "!file!.exe" (
-		echo Compile error...
+		echo Compile error... retry?
+		pause
+		goto :retry
 	)
 )
 
@@ -63,5 +66,6 @@ if %compile_only% NEQ true (
 		del "%zip%"
 	)
 	echo Creating %zip%
-	"build\7z.exe" a -scsUTF-8 "%zip%" COCBot\* CSV\* Help\* images\* imgxml\* Languages\* lib\* Strategies\* License.txt "MyBot.run Community Support Key.asc" README.md MyBot.run.au3 MyBot.run.exe MyBot.run.MiniGui.au3 MyBot.run.MiniGui.exe MyBot.run.txt MyBot.run.version.au3 MyBot.run.Watchdog.au3 MyBot.run.Watchdog.exe MyBot.run.Wmi.au3 MyBot.run.Wmi.exe lib\ModLibs\Updater\*
+	"build\7z.exe" a -scsUTF-8 "%zip%" COCBot\* CSV\* Help\* images\* imgxml\* Languages\* lib\* Strategies\* License.txt "MyBot.run Community Support Key.asc" README.md MyBot.run.au3 MyBot.run.exe MyBot.run.MiniGui.au3 MyBot.run.MiniGui.exe MyBot.run.txt MyBot.run.version.au3 MyBot.run.Watchdog.au3 MyBot.run.Watchdog.exe MyBot.run.Wmi.au3 MyBot.run.Wmi.exe AIOMod.Updater.au3 AIOMod.Updater.exe
 )
+pause

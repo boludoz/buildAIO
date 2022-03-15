@@ -1,18 +1,15 @@
 #include-once
 
-#include "GuiCtrlInternals.au3"
 #include "Memory.au3"
 #include "RebarConstants.au3"
 #include "SendMessage.au3"
 #include "StructureConstants.au3"
 #include "UDFGlobalID.au3"
-#include "WinAPIConstants.au3"
-#include "WinAPIConv.au3"
-#include "WinAPISysInternals.au3"
+#include "WinAPI.au3"
 
 ; #INDEX# =======================================================================================================================
 ; Title .........: Rebar
-; AutoIt Version : 3.3.15.4
+; AutoIt Version : 3.3.14.2
 ; Language ......: English
 ; Description ...: Functions that assist with Rebar control management.
 ;                  Rebar controls act as containers for child windows. An application assigns child windows,
@@ -24,9 +21,7 @@
 
 ; #VARIABLES# ===================================================================================================================
 
-; Optimization by pixelsearch DllStructCreate() once
-Global $__g_tReBarBuffer, $__g_tReBarBufferANSI ; = DllStructCreate()
-
+Global $__g_hRBLastWnd
 ; ===============================================================================================================================
 
 ; #CONSTANTS# ===================================================================================================================
@@ -168,21 +163,14 @@ Global Const $tagRBHITTESTINFO = $tagPOINT & ";uint flags;int iBand"
 
 ; #FUNCTION# ====================================================================================================================
 ; Author ........: Gary Frost
-; Modified.......: Jpm
+; Modified.......:
 ; ===============================================================================================================================
 Func _GUICtrlRebar_AddBand($hWndRebar, $hWndChild, $iMinWidth = 100, $iDefaultWidth = 100, $sText = "", $iIndex = -1, $iStyle = -1)
+	Local $bUnicode = _GUICtrlRebar_GetUnicodeFormat($hWndRebar)
+
 	If Not IsHWnd($hWndChild) Then $hWndChild = GUICtrlGetHandle($hWndChild)
-
-	Local $tBuffer, $iMsg
-	If _GUICtrlRebar_GetUnicodeFormat($hWndRebar) Then
-		$tBuffer = $__g_tReBarBuffer
-		$iMsg = $RB_INSERTBANDW
-	Else
-		$tBuffer = $__g_tReBarBufferANSI
-		$iMsg = $RB_INSERTBANDA
-	EndIf
-
 	Local $tINFO = DllStructCreate($tagREBARBANDINFO)
+	Local $iSize = DllStructGetSize($tINFO)
 
 	If $iDefaultWidth < $iMinWidth Then $iDefaultWidth = $iMinWidth
 	If $iStyle <> -1 Then
@@ -191,7 +179,7 @@ Func _GUICtrlRebar_AddBand($hWndRebar, $hWndChild, $iMinWidth = 100, $iDefaultWi
 		$iStyle = BitOR($RBBS_CHILDEDGE, $RBBS_GRIPPERALWAYS)
 	EndIf
 	;// Initialize band info used by the control
-	DllStructSetData($tINFO, "cbSize", DllStructGetSize($tINFO))
+	DllStructSetData($tINFO, "cbSize", $iSize)
 	DllStructSetData($tINFO, "fMask", BitOR($RBBIM_STYLE, $RBBIM_TEXT, $RBBIM_CHILD, $RBBIM_CHILDSIZE, $RBBIM_SIZE, $RBBIM_ID))
 	DllStructSetData($tINFO, "fStyle", $iStyle)
 
@@ -199,8 +187,15 @@ Func _GUICtrlRebar_AddBand($hWndRebar, $hWndChild, $iMinWidth = 100, $iDefaultWi
 	Local $tRECT = _WinAPI_GetWindowRect($hWndChild)
 	Local $iBottom = DllStructGetData($tRECT, "Bottom")
 	Local $iTop = DllStructGetData($tRECT, "Top")
+	Local $iBuffer = StringLen($sText) + 1
+	Local $tBuffer
+	If $bUnicode Then
+		$tBuffer = DllStructCreate("wchar Text[" & $iBuffer & "]")
+		$iBuffer *= 2
+	Else
+		$tBuffer = DllStructCreate("char Text[" & $iBuffer & "]")
+	EndIf
 	DllStructSetData($tBuffer, "Text", $sText)
-
 	DllStructSetData($tINFO, "hwndChild", $hWndChild)
 	DllStructSetData($tINFO, "cxMinChild", $iMinWidth)
 	DllStructSetData($tINFO, "cyMinChild", $iBottom - $iTop)
@@ -208,27 +203,33 @@ Func _GUICtrlRebar_AddBand($hWndRebar, $hWndChild, $iMinWidth = 100, $iDefaultWi
 	;// box itself will expand to fill the band.
 	DllStructSetData($tINFO, "cx", $iDefaultWidth)
 	DllStructSetData($tINFO, "wID", _GUICtrlRebar_GetBandCount($hWndRebar))
-	;// Add the band that has the combobox
-	Local $iRet = __GUICtrl_SendMsg($hWndRebar, $iMsg, $iIndex, $tINFO, $tBuffer, False, 6) <> 0
 
+	Local $tMemMap
+	Local $pMemory = _MemInit($hWndRebar, $iSize + $iBuffer, $tMemMap)
+	Local $pText = $pMemory + $iSize
+	DllStructSetData($tINFO, "lpText", $pText)
+	_MemWrite($tMemMap, $tINFO, $pMemory, $iSize)
+	_MemWrite($tMemMap, $tBuffer, $pText, $iBuffer)
+	;// Add the band that has the combobox
+	Local $iRet
+	If $bUnicode Then
+		$iRet = _SendMessage($hWndRebar, $RB_INSERTBANDW, $iIndex, $pMemory, 0, "wparam", "ptr") <> 0
+	Else
+		$iRet = _SendMessage($hWndRebar, $RB_INSERTBANDA, $iIndex, $pMemory, 0, "wparam", "ptr") <> 0
+	EndIf
+	_MemFree($tMemMap)
 	Return $iRet
 EndFunc   ;==>_GUICtrlRebar_AddBand
 
 ; #FUNCTION# ====================================================================================================================
 ; Author ........: Gary Frost
-; Modified.......: Jpm
+; Modified.......:
 ; ===============================================================================================================================
 Func _GUICtrlRebar_AddToolBarBand($hWndRebar, $hWndToolbar, $sText = "", $iIndex = -1, $iStyle = -1)
-	Local $tBuffer, $iMsg
-	If _GUICtrlRebar_GetUnicodeFormat($hWndRebar) Then
-		$tBuffer = $__g_tReBarBuffer
-		$iMsg = $RB_INSERTBANDW
-	Else
-		$tBuffer = $__g_tReBarBufferANSI
-		$iMsg = $RB_INSERTBANDA
-	EndIf
+	Local $bUnicode = _GUICtrlRebar_GetUnicodeFormat($hWndRebar)
 
 	Local $tINFO = DllStructCreate($tagREBARBANDINFO)
+	Local $iSize = DllStructGetSize($tINFO)
 
 	If $iStyle <> -1 Then
 		$iStyle = BitOR($iStyle, $RBBS_CHILDEDGE, $RBBS_GRIPPERALWAYS)
@@ -237,7 +238,7 @@ Func _GUICtrlRebar_AddToolBarBand($hWndRebar, $hWndToolbar, $sText = "", $iIndex
 	EndIf
 
 	;// Initialize band info used by the toolbar
-	DllStructSetData($tINFO, "cbSize", DllStructGetSize($tINFO))
+	DllStructSetData($tINFO, "cbSize", $iSize)
 	DllStructSetData($tINFO, "fMask", BitOR($RBBIM_STYLE, $RBBIM_TEXT, $RBBIM_CHILD, $RBBIM_CHILDSIZE, $RBBIM_SIZE, $RBBIM_ID))
 	DllStructSetData($tINFO, "fStyle", $iStyle)
 
@@ -248,6 +249,14 @@ Func _GUICtrlRebar_AddToolBarBand($hWndRebar, $hWndToolbar, $sText = "", $iIndex
 	Local $iDefaultWidth = $iNumButtons * _WinAPI_LoWord($iBtnSize)
 
 	;// Set values unique to the band with the toolbar.
+	Local $iBuffer = StringLen($sText) + 1
+	Local $tBuffer
+	If $bUnicode Then
+		$tBuffer = DllStructCreate("wchar Text[" & $iBuffer & "]")
+		$iBuffer *= 2
+	Else
+		$tBuffer = DllStructCreate("char Text[" & $iBuffer & "]")
+	EndIf
 	DllStructSetData($tBuffer, "Text", $sText)
 	DllStructSetData($tINFO, "hwndChild", $hWndToolbar)
 	DllStructSetData($tINFO, "cyChild", _WinAPI_HiWord($iBtnSize))
@@ -257,9 +266,19 @@ Func _GUICtrlRebar_AddToolBarBand($hWndRebar, $hWndToolbar, $sText = "", $iIndex
 	DllStructSetData($tINFO, "wID", _GUICtrlRebar_GetBandCount($hWndRebar))
 
 	;// Add the band that has the toolbar.
+	Local $tMemMap, $iRet
+	Local $pMemory = _MemInit($hWndRebar, $iSize + $iBuffer, $tMemMap)
+	Local $pText = $pMemory + $iSize
+	DllStructSetData($tINFO, "lpText", $pText)
+	_MemWrite($tMemMap, $tINFO, $pMemory, $iSize)
+	_MemWrite($tMemMap, $tBuffer, $pText, $iBuffer)
 	;// Add the band that has the combobox
-	Local $iRet = __GUICtrl_SendMsg($hWndRebar, $iMsg, $iIndex, $tINFO, $tBuffer, False, 6) <> 0
-
+	If $bUnicode Then
+		$iRet = _SendMessage($hWndRebar, $RB_INSERTBANDW, $iIndex, $pMemory, 0, "wparam", "ptr") <> 0
+	Else
+		$iRet = _SendMessage($hWndRebar, $RB_INSERTBANDA, $iIndex, $pMemory, 0, "wparam", "ptr") <> 0
+	EndIf
+	_MemFree($tMemMap)
 	Return $iRet
 EndFunc   ;==>_GUICtrlRebar_AddToolBarBand
 
@@ -276,8 +295,8 @@ EndFunc   ;==>_GUICtrlRebar_BeginDrag
 ; Modified.......:
 ; ===============================================================================================================================
 Func _GUICtrlRebar_Create($hWnd, $iStyles = 0x513)
-	Local Const $ICC_BAR_CLASSES = 0x00000004 ; toolbar
-	Local Const $ICC_COOL_CLASSES = 0x00000400 ; rebar
+	Local Const $ICC_BAR_CLASSES = 0x00000004; toolbar
+	Local Const $ICC_COOL_CLASSES = 0x00000400; rebar
 
 	Local $iStyle = BitOR($__UDFGUICONSTANT_WS_CHILD, $__UDFGUICONSTANT_WS_VISIBLE, $__REBARCONSTANT_WS_CLIPCHILDREN, $__REBARCONSTANT_WS_CLIPSIBLINGS)
 	If $iStyles <> BitOR($__REBARCONSTANT_CCS_TOP, $RBS_VARHEIGHT) Then
@@ -290,16 +309,16 @@ Func _GUICtrlRebar_Create($hWnd, $iStyles = 0x513)
 	DllStructSetData($tICCE, 1, DllStructGetSize($tICCE))
 	DllStructSetData($tICCE, 2, BitOR($ICC_BAR_CLASSES, $ICC_COOL_CLASSES))
 
-	Local $aCall = DllCall('comctl32.dll', 'int', 'InitCommonControlsEx', 'struct*', $tICCE)
+	Local $aResult = DllCall('comctl32.dll', 'int', 'InitCommonControlsEx', 'struct*', $tICCE)
 	If @error Then Return SetError(@error, @extended, 0)
-	If $aCall[0] = 0 Then Return SetError(-2, 0, 0)
+	If $aResult[0] = 0 Then Return SetError(-2, 0, 0)
 
 	Local $nCtrlID = __UDF_GetNextGlobalID($hWnd)
 	If @error Then Return SetError(@error, @extended, 0)
 
 	Local $hReBar = _WinAPI_CreateWindowEx(0, $__REBARCONSTANT_ClassName, "", $iStyle, 0, 0, 0, 0, $hWnd, $nCtrlID)
-	If @error Then Return SetError(-1, -1, 0)
 
+	If @error Then Return SetError(-1, -1, 0)
 	Return $hReBar
 EndFunc   ;==>_GUICtrlRebar_Create
 
@@ -319,7 +338,7 @@ Func _GUICtrlRebar_Destroy(ByRef $hWnd)
 	If Not _WinAPI_IsClassName($hWnd, $__REBARCONSTANT_ClassName) Then Return SetError(2, 2, False)
 
 	Local $iDestroyed = 0
-	If _WinAPI_InProcess($hWnd, $__g_hGUICtrl_LastWnd) Then
+	If _WinAPI_InProcess($hWnd, $__g_hRBLastWnd) Then
 		Local $iRebarCount = _GUICtrlRebar_GetBandCount($hWnd)
 		For $iIndex = $iRebarCount - 1 To 0 Step -1
 			_GUICtrlRebar_DeleteBand($hWnd, $iIndex)
@@ -336,7 +355,6 @@ Func _GUICtrlRebar_Destroy(ByRef $hWnd)
 		Return SetError(1, 1, False)
 	EndIf
 	If $iDestroyed Then $hWnd = 0
-
 	Return $iDestroyed <> 0
 EndFunc   ;==>_GUICtrlRebar_Destroy
 
@@ -363,7 +381,6 @@ EndFunc   ;==>_GUICtrlRebar_EndDrag
 Func _GUICtrlRebar_GetBandBackColor($hWnd, $iIndex)
 	Local $tINFO = __GUICtrlRebar_GetBandInfo($hWnd, $iIndex, $RBBIM_COLORS)
 	If @error Then Return SetError(@error, @error, 0)
-
 	Return DllStructGetData($tINFO, "clrBack")
 EndFunc   ;==>_GUICtrlRebar_GetBandBackColor
 
@@ -373,13 +390,11 @@ EndFunc   ;==>_GUICtrlRebar_GetBandBackColor
 ; ===============================================================================================================================
 Func _GUICtrlRebar_GetBandBorders($hWnd, $iIndex)
 	Local $tRECT = _GUICtrlRebar_GetBandBordersEx($hWnd, $iIndex)
-
 	Local $aRect[4]
 	$aRect[0] = DllStructGetData($tRECT, "Left")
 	$aRect[1] = DllStructGetData($tRECT, "Top")
 	$aRect[2] = DllStructGetData($tRECT, "Right")
 	$aRect[3] = DllStructGetData($tRECT, "Bottom")
-
 	Return $aRect
 EndFunc   ;==>_GUICtrlRebar_GetBandBorders
 
@@ -390,7 +405,6 @@ EndFunc   ;==>_GUICtrlRebar_GetBandBorders
 Func _GUICtrlRebar_GetBandBordersEx($hWnd, $iIndex)
 	Local $tRECT = DllStructCreate($tagRECT)
 	_SendMessage($hWnd, $RB_GETBANDBORDERS, $iIndex, $tRECT, 0, "uint", "struct*")
-
 	Return $tRECT
 EndFunc   ;==>_GUICtrlRebar_GetBandBordersEx
 
@@ -401,7 +415,6 @@ EndFunc   ;==>_GUICtrlRebar_GetBandBordersEx
 Func _GUICtrlRebar_GetBandChildHandle($hWnd, $iIndex)
 	Local $tINFO = __GUICtrlRebar_GetBandInfo($hWnd, $iIndex, $RBBIM_CHILD)
 	If @error Then Return SetError(@error, @error, 0)
-
 	Return DllStructGetData($tINFO, "hwndChild")
 EndFunc   ;==>_GUICtrlRebar_GetBandChildHandle
 
@@ -413,7 +426,6 @@ Func _GUICtrlRebar_GetBandChildSize($hWnd, $iIndex)
 	Local $aSizes[5]
 	Local $tINFO = __GUICtrlRebar_GetBandInfo($hWnd, $iIndex, $RBBIM_CHILDSIZE)
 	If @error Then Return SetError(@error, @error, $aSizes)
-
 	$aSizes[0] = DllStructGetData($tINFO, "cxMinChild")
 	$aSizes[1] = DllStructGetData($tINFO, "cyMinChild")
 	$aSizes[2] = DllStructGetData($tINFO, "cyChild")
@@ -438,7 +450,6 @@ EndFunc   ;==>_GUICtrlRebar_GetBandCount
 Func _GUICtrlRebar_GetBandForeColor($hWnd, $iIndex)
 	Local $tINFO = __GUICtrlRebar_GetBandInfo($hWnd, $iIndex, $RBBIM_COLORS)
 	If @error Then Return SetError(@error, @error, 0)
-
 	Return DllStructGetData($tINFO, "clrFore")
 EndFunc   ;==>_GUICtrlRebar_GetBandForeColor
 
@@ -449,7 +460,6 @@ EndFunc   ;==>_GUICtrlRebar_GetBandForeColor
 Func _GUICtrlRebar_GetBandHeaderSize($hWnd, $iIndex)
 	Local $tINFO = __GUICtrlRebar_GetBandInfo($hWnd, $iIndex, $RBBIM_HEADERSIZE)
 	If @error Then Return SetError(@error, @error, 0)
-
 	Return DllStructGetData($tINFO, "cxHeader")
 EndFunc   ;==>_GUICtrlRebar_GetBandHeaderSize
 
@@ -460,7 +470,6 @@ EndFunc   ;==>_GUICtrlRebar_GetBandHeaderSize
 Func _GUICtrlRebar_GetBandID($hWnd, $iIndex)
 	Local $tINFO = __GUICtrlRebar_GetBandInfo($hWnd, $iIndex, $RBBIM_ID)
 	If @error Then Return SetError(@error, @error, 0)
-
 	Return DllStructGetData($tINFO, "wID")
 EndFunc   ;==>_GUICtrlRebar_GetBandID
 
@@ -471,7 +480,6 @@ EndFunc   ;==>_GUICtrlRebar_GetBandID
 Func _GUICtrlRebar_GetBandIdealSize($hWnd, $iIndex)
 	Local $tINFO = __GUICtrlRebar_GetBandInfo($hWnd, $iIndex, $RBBIM_IDEALSIZE)
 	If @error Then Return SetError(@error, @error, 0)
-
 	Return DllStructGetData($tINFO, "cxIdeal")
 EndFunc   ;==>_GUICtrlRebar_GetBandIdealSize
 
@@ -484,7 +492,7 @@ EndFunc   ;==>_GUICtrlRebar_GetBandIdealSize
 ;                  $iMask       - Flags that indicate which members of this structure are valid
 ; Return values .: Success      - $tagREBARBANDINFO structure
 ; Author ........: Gary Frost
-; Modified.......: Jpm
+; Modified.......:
 ; Remarks .......:
 ; Related .......:
 ; Link ..........:
@@ -492,8 +500,8 @@ EndFunc   ;==>_GUICtrlRebar_GetBandIdealSize
 ; ===============================================================================================================================
 Func __GUICtrlRebar_GetBandInfo($hWnd, $iIndex, $iMask)
 	Local $tINFO = DllStructCreate($tagREBARBANDINFO)
-
-	DllStructSetData($tINFO, "cbSize", DllStructGetSize($tINFO))
+	Local $iSize = DllStructGetSize($tINFO)
+	DllStructSetData($tINFO, "cbSize", $iSize)
 	DllStructSetData($tINFO, "fMask", $iMask)
 
 	Local $iRet = _SendMessage($hWnd, $RB_GETBANDINFOW, $iIndex, $tINFO, 0, "wparam", "struct*")
@@ -508,7 +516,6 @@ EndFunc   ;==>__GUICtrlRebar_GetBandInfo
 Func _GUICtrlRebar_GetBandLParam($hWnd, $iIndex)
 	Local $tINFO = __GUICtrlRebar_GetBandInfo($hWnd, $iIndex, $RBBIM_LPARAM)
 	If @error Then Return SetError(@error, @error, 0)
-
 	Return DllStructGetData($tINFO, "lParam")
 EndFunc   ;==>_GUICtrlRebar_GetBandLParam
 
@@ -519,7 +526,6 @@ EndFunc   ;==>_GUICtrlRebar_GetBandLParam
 Func _GUICtrlRebar_GetBandLength($hWnd, $iIndex)
 	Local $tINFO = __GUICtrlRebar_GetBandInfo($hWnd, $iIndex, $RBBIM_SIZE)
 	If @error Then Return SetError(@error, @error, 0)
-
 	Return DllStructGetData($tINFO, "cx")
 EndFunc   ;==>_GUICtrlRebar_GetBandLength
 
@@ -529,13 +535,11 @@ EndFunc   ;==>_GUICtrlRebar_GetBandLength
 ; ===============================================================================================================================
 Func _GUICtrlRebar_GetBandMargins($hWnd)
 	Local $tMargins = _GUICtrlRebar_GetBandMarginsEx($hWnd)
-
 	Local $aMargins[4]
 	$aMargins[0] = DllStructGetData($tMargins, "cxLeftWidth")
 	$aMargins[1] = DllStructGetData($tMargins, "cxRightWidth")
 	$aMargins[2] = DllStructGetData($tMargins, "cyTopHeight")
 	$aMargins[3] = DllStructGetData($tMargins, "cyBottomHeight")
-
 	Return $aMargins
 EndFunc   ;==>_GUICtrlRebar_GetBandMargins
 
@@ -673,13 +677,11 @@ EndFunc   ;==>_GUICtrlRebar_GetBandStyleVariableHeight
 ; ===============================================================================================================================
 Func _GUICtrlRebar_GetBandRect($hWnd, $iIndex)
 	Local $tRECT = _GUICtrlRebar_GetBandRectEx($hWnd, $iIndex)
-
 	Local $aRect[4]
 	$aRect[0] = DllStructGetData($tRECT, "Left")
 	$aRect[1] = DllStructGetData($tRECT, "Top")
 	$aRect[2] = DllStructGetData($tRECT, "Right")
 	$aRect[3] = DllStructGetData($tRECT, "Bottom")
-
 	Return $aRect
 EndFunc   ;==>_GUICtrlRebar_GetBandRect
 
@@ -690,32 +692,46 @@ EndFunc   ;==>_GUICtrlRebar_GetBandRect
 Func _GUICtrlRebar_GetBandRectEx($hWnd, $iIndex)
 	Local $tRECT = DllStructCreate($tagRECT)
 	_SendMessage($hWnd, $RB_GETRECT, $iIndex, $tRECT, 0, "uint", "struct*")
-
 	Return $tRECT
 EndFunc   ;==>_GUICtrlRebar_GetBandRectEx
 
 ; #FUNCTION# ====================================================================================================================
 ; Author ........: Gary Frost
-; Modified.......: Jpm
+; Modified.......:
 ; ===============================================================================================================================
 Func _GUICtrlRebar_GetBandText($hWnd, $iIndex)
-	Local $tBuffer, $iMsg
-	If _GUICtrlRebar_GetUnicodeFormat($hWnd) Then
-		$tBuffer = $__g_tReBarBuffer
-		$iMsg = $RB_GETBANDINFOW
-	Else
-		$tBuffer = $__g_tReBarBufferANSI
-		$iMsg = $RB_GETBANDINFOA
-	EndIf
+	Local $bUnicode = _GUICtrlRebar_GetUnicodeFormat($hWnd)
 
 	Local $tINFO = DllStructCreate($tagREBARBANDINFO)
+	Local $iSize = DllStructGetSize($tINFO)
+	Local $tBuffer
+	Local $iBuffer = 4096
+	If $bUnicode Then
+		$tBuffer = DllStructCreate("wchar Buffer[4096]")
+		$iBuffer *= 2
+	Else
+		$tBuffer = DllStructCreate("char Buffer[4096]")
+	EndIf
 
-	DllStructSetData($tINFO, "cbSize", DllStructGetSize($tINFO))
+	DllStructSetData($tINFO, "cbSize", $iSize)
 	DllStructSetData($tINFO, "fMask", $RBBIM_TEXT)
+	DllStructSetData($tINFO, "cch", $iBuffer)
 
-	Local $iRet = __GUICtrl_SendMsg($hWnd, $iMsg, $iIndex, $tINFO, $tBuffer, False, 6, True)
+	Local $tMemMap
+	Local $pMemory = _MemInit($hWnd, $iSize + $iBuffer, $tMemMap)
+	Local $pText = $pMemory + $iSize
+	DllStructSetData($tINFO, "lpText", $pText)
+	_MemWrite($tMemMap, $tINFO, $pMemory, $iSize)
+	Local $iRet
+	If $bUnicode Then
+		$iRet = _SendMessage($hWnd, $RB_GETBANDINFOW, $iIndex, $pMemory, 0, "wparam", "ptr")
+	Else
+		$iRet = _SendMessage($hWnd, $RB_GETBANDINFOA, $iIndex, $pMemory, 0, "wparam", "ptr")
+	EndIf
+	_MemRead($tMemMap, $pText, $tBuffer, $iBuffer)
+	_MemFree($tMemMap)
 
-	Return SetError($iRet = 0, 0, DllStructGetData($tBuffer, "Text"))
+	Return SetError($iRet = 0, 0, DllStructGetData($tBuffer, "Buffer"))
 EndFunc   ;==>_GUICtrlRebar_GetBandText
 
 ; #FUNCTION# ====================================================================================================================
@@ -756,10 +772,8 @@ Func _GUICtrlRebar_GetColorScheme($hWnd)
 	Local $aColors[2]
 	Local $tColorScheme = __GUICtrlRebar_GetColorSchemeEx($hWnd)
 	If @error Then Return SetError(@error, @error, $aColors)
-
 	$aColors[0] = DllStructGetData($tColorScheme, "BtnHighlight")
 	$aColors[1] = DllStructGetData($tColorScheme, "BtnShadow")
-
 	Return $aColors
 EndFunc   ;==>_GUICtrlRebar_GetColorScheme
 
@@ -780,7 +794,6 @@ Func __GUICtrlRebar_GetColorSchemeEx($hWnd)
 	Local $tColorScheme = DllStructCreate($tagCOLORSCHEME)
 	DllStructSetData($tColorScheme, "Size", DllStructGetSize($tColorScheme))
 	Local $iRet = _SendMessage($hWnd, $RB_GETCOLORSCHEME, 0, $tColorScheme, 0, "wparam", "struct*")
-
 	Return SetError($iRet = 0, 0, $tColorScheme)
 EndFunc   ;==>__GUICtrlRebar_GetColorSchemeEx
 
@@ -818,20 +831,15 @@ EndFunc   ;==>_GUICtrlRebar_GetToolTips
 
 ; #FUNCTION# ====================================================================================================================
 ; Author ........: Gary Frost
-; Modified.......: Jpm
+; Modified.......:
 ; ===============================================================================================================================
 Func _GUICtrlRebar_GetUnicodeFormat($hWnd)
-	If Not IsDllStruct($__g_tReBarBuffer) Then
-		$__g_tReBarBuffer = DllStructCreate("wchar Text[4096]")
-		$__g_tReBarBufferANSI = DllStructCreate("char Text[4096]", DllStructGetPtr($__g_tReBarBuffer))
-	EndIf
-
 	Return _SendMessage($hWnd, $RB_GETUNICODEFORMAT) <> 0
 EndFunc   ;==>_GUICtrlRebar_GetUnicodeFormat
 
 ; #FUNCTION# ====================================================================================================================
 ; Author ........: Gary Frost
-; Modified.......: Jpm
+; Modified.......:
 ; ===============================================================================================================================
 Func _GUICtrlRebar_HitTest($hWnd, $iX = -1, $iY = -1)
 	Local $iMode = Opt("MouseCoordMode", 1)
@@ -849,17 +857,19 @@ Func _GUICtrlRebar_HitTest($hWnd, $iX = -1, $iY = -1)
 	Local $tTest = DllStructCreate($tagRBHITTESTINFO)
 	DllStructSetData($tTest, "X", $iX)
 	DllStructSetData($tTest, "Y", $iY)
-
-	Local $aTest[6]
-	$aTest[0] = _SendMessage($hWnd, $RB_HITTEST, 0, $tTest, 0, "wparam", "struct*")
-
+	Local $iTest = DllStructGetSize($tTest)
+	Local $tMemMap, $aTest[6]
+	Local $pMemory = _MemInit($hWnd, $iTest, $tMemMap)
+	_MemWrite($tMemMap, $tTest, $pMemory, $iTest)
+	$aTest[0] = _SendMessage($hWnd, $RB_HITTEST, 0, $pMemory, 0, "wparam", "ptr")
+	_MemRead($tMemMap, $pMemory, $tTest, $iTest)
+	_MemFree($tMemMap)
 	Local $iFlags = DllStructGetData($tTest, "flags")
 	$aTest[1] = BitAND($iFlags, $RBHT_NOWHERE) <> 0
 	$aTest[2] = BitAND($iFlags, $RBHT_CLIENT) <> 0
 	$aTest[3] = BitAND($iFlags, $RBHT_CAPTION) <> 0
 	$aTest[4] = BitAND($iFlags, $RBHT_CHEVRON) <> 0
 	$aTest[5] = BitAND($iFlags, $RBHT_GRABBER) <> 0
-
 	Return $aTest
 EndFunc   ;==>_GUICtrlRebar_HitTest
 
@@ -898,7 +908,7 @@ EndFunc   ;==>_GUICtrlRebar_MoveBand
 
 ; #FUNCTION# ====================================================================================================================
 ; Author ........: Gary Frost
-; Modified.......: Jpm
+; Modified.......:
 ; ===============================================================================================================================
 Func _GUICtrlRebar_SetBandBackColor($hWnd, $iIndex, $iColor)
 	Local $tINFO = DllStructCreate($tagREBARBANDINFO)
@@ -909,39 +919,40 @@ Func _GUICtrlRebar_SetBandBackColor($hWnd, $iIndex, $iColor)
 	DllStructSetData($tINFO, "clrBack", $iColor)
 	DllStructGetData($tINFO, "clrFore", _GUICtrlRebar_GetBandForeColor($hWnd, $iIndex))
 
-	Local $iMsg
+	Local $iRet, $tMemMap
+	Local $pMemory = _MemInit($hWnd, $iSize, $tMemMap)
+	_MemWrite($tMemMap, $tINFO, $pMemory, $iSize)
 	If _GUICtrlRebar_GetUnicodeFormat($hWnd) Then
-		$iMsg = $RB_SETBANDINFOW
+		$iRet = _SendMessage($hWnd, $RB_SETBANDINFOW, $iIndex, $pMemory, 0, "wparam", "ptr") <> 0
 	Else
-		$iMsg = $RB_SETBANDINFOA
+		$iRet = _SendMessage($hWnd, $RB_SETBANDINFOA, $iIndex, $pMemory, 0, "wparam", "ptr") <> 0
 	EndIf
-
-	Local $iRet = _SendMessage($hWnd, $iMsg, $iIndex, $tINFO, 0, "wparam", "struct*") <> 0
-
+	_MemFree($tMemMap)
 	Return $iRet
 EndFunc   ;==>_GUICtrlRebar_SetBandBackColor
 
 ; #FUNCTION# ====================================================================================================================
 ; Author ........: Gary Frost
-; Modified.......: Jpm
+; Modified.......:
 ; ===============================================================================================================================
 Func _GUICtrlRebar_SetBandForeColor($hWnd, $iIndex, $iColor)
 	Local $tINFO = DllStructCreate($tagREBARBANDINFO)
+	Local $iSize = DllStructGetSize($tINFO)
 
-	DllStructSetData($tINFO, "cbSize", DllStructGetSize($tINFO))
+	DllStructSetData($tINFO, "cbSize", $iSize)
 	DllStructSetData($tINFO, "fMask", $RBBIM_COLORS)
 	DllStructSetData($tINFO, "clrFore", $iColor)
 	DllStructSetData($tINFO, "clrBack", _GUICtrlRebar_GetBandBackColor($hWnd, $iIndex))
 
-	Local $iMsg
+	Local $iRet, $tMemMap
+	Local $pMemory = _MemInit($hWnd, $iSize, $tMemMap)
+	_MemWrite($tMemMap, $tINFO, $pMemory, $iSize)
 	If _GUICtrlRebar_GetUnicodeFormat($hWnd) Then
-		$iMsg = $RB_SETBANDINFOW
+		$iRet = _SendMessage($hWnd, $RB_SETBANDINFOW, $iIndex, $pMemory, 0, "wparam", "ptr") <> 0
 	Else
-		$iMsg = $RB_SETBANDINFOA
+		$iRet = _SendMessage($hWnd, $RB_SETBANDINFOA, $iIndex, $pMemory, 0, "wparam", "ptr") <> 0
 	EndIf
-
-	Local $iRet = _SendMessage($hWnd, $iMsg, $iIndex, $tINFO, 0, "wparam", "struct*") <> 0
-
+	_MemFree($tMemMap)
 	Return $iRet
 EndFunc   ;==>_GUICtrlRebar_SetBandForeColor
 
@@ -981,7 +992,7 @@ EndFunc   ;==>_GUICtrlRebar_SetBandIdealSize
 ; Return values .: Success   - True
 ;                  Failure   - False
 ; Author ........: Gary Frost
-; Modified.......: Jpm
+; Modified.......:
 ; Remarks .......:
 ; Related .......: __GUICtrlRebar_GetBandInfo
 ; Link ..........:
@@ -989,20 +1000,21 @@ EndFunc   ;==>_GUICtrlRebar_SetBandIdealSize
 ; ===============================================================================================================================
 Func __GUICtrlRebar_SetBandInfo($hWnd, $iIndex, $iMask, $sName, $iData)
 	Local $tINFO = DllStructCreate($tagREBARBANDINFO)
+	Local $iSize = DllStructGetSize($tINFO)
 
-	DllStructSetData($tINFO, "cbSize", DllStructGetSize($tINFO))
+	DllStructSetData($tINFO, "cbSize", $iSize)
 	DllStructSetData($tINFO, "fMask", $iMask)
 	DllStructSetData($tINFO, $sName, $iData)
 
-	Local $iMsg
+	Local $iRet, $tMemMap
+	Local $pMemory = _MemInit($hWnd, $iSize, $tMemMap)
+	_MemWrite($tMemMap, $tINFO, $pMemory, $iSize)
 	If _GUICtrlRebar_GetUnicodeFormat($hWnd) Then
-		$iMsg = $RB_SETBANDINFOW
+		$iRet = _SendMessage($hWnd, $RB_SETBANDINFOW, $iIndex, $pMemory, 0, "wparam", "ptr") <> 0
 	Else
-		$iMsg = $RB_SETBANDINFOA
+		$iRet = _SendMessage($hWnd, $RB_SETBANDINFOA, $iIndex, $pMemory, 0, "wparam", "ptr") <> 0
 	EndIf
-
-	Local $iRet = _SendMessage($hWnd, $iMsg, $iIndex, $tINFO, 0, "wparam", "struct*") <> 0
-
+	_MemFree($tMemMap)
 	Return $iRet
 EndFunc   ;==>__GUICtrlRebar_SetBandInfo
 
@@ -1188,25 +1200,39 @@ EndFunc   ;==>_GUICtrlRebar_SetBandStyleVariableHeight
 
 ; #FUNCTION# ====================================================================================================================
 ; Author ........: Gary Frost
-; Modified.......: Jpm
+; Modified.......:
 ; ===============================================================================================================================
 Func _GUICtrlRebar_SetBandText($hWnd, $iIndex, $sText)
-	Local $tBuffer, $iMsg
-	If _GUICtrlRebar_GetUnicodeFormat($hWnd) Then
-		$tBuffer = $__g_tReBarBuffer
-		$iMsg = $RB_SETBANDINFOW
-	Else
-		$tBuffer = $__g_tReBarBufferANSI
-		$iMsg = $RB_SETBANDINFOA
-	EndIf
+	Local $bUnicode = _GUICtrlRebar_GetUnicodeFormat($hWnd)
 
 	Local $tINFO = DllStructCreate($tagREBARBANDINFO)
+	Local $iSize = DllStructGetSize($tINFO)
+	Local $iBuffer = StringLen($sText) + 1
+	Local $tBuffer
+	If $bUnicode Then
+		$tBuffer = DllStructCreate("wchar Buffer[" & $iBuffer & "]")
+		$iBuffer *= 2
+	Else
+		$tBuffer = DllStructCreate("char Buffer[" & $iBuffer & "]")
+	EndIf
 
-	DllStructSetData($tBuffer, "Text", $sText)
-	DllStructSetData($tINFO, "cbSize", DllStructGetSize($tINFO))
+	DllStructSetData($tBuffer, "Buffer", $sText)
+	DllStructSetData($tINFO, "cbSize", $iSize)
 	DllStructSetData($tINFO, "fMask", $RBBIM_TEXT)
+	DllStructSetData($tINFO, "cch", $iBuffer)
 
-	Local $iRet = __GUICtrl_SendMsg($hWnd, $iMsg, $iIndex, $tINFO, $tBuffer, False, 6)
+	Local $iRet, $tMemMap
+	Local $pMemory = _MemInit($hWnd, $iSize + $iBuffer, $tMemMap)
+	Local $pText = $pMemory + $iSize
+	DllStructSetData($tINFO, "lpText", $pText)
+	_MemWrite($tMemMap, $tINFO, $pMemory, $iSize)
+	_MemWrite($tMemMap, $tBuffer, $pText, $iBuffer)
+	If $bUnicode Then
+		$iRet = _SendMessage($hWnd, $RB_SETBANDINFOW, $iIndex, $pMemory, 0, "wparam", "ptr")
+	Else
+		$iRet = _SendMessage($hWnd, $RB_SETBANDINFOA, $iIndex, $pMemory, 0, "wparam", "ptr")
+	EndIf
+	_MemFree($tMemMap)
 
 	Return $iRet <> 0
 EndFunc   ;==>_GUICtrlRebar_SetBandText
@@ -1229,23 +1255,26 @@ Func _GUICtrlRebar_SetBarInfo($hWnd, $hIml)
 	DllStructSetData($tINFO, "cbSize", DllStructGetSize($tINFO))
 	DllStructSetData($tINFO, "fMask", $RBIM_IMAGELIST)
 	DllStructSetData($tINFO, "himl", $hIml)
-
 	Return _SendMessage($hWnd, $RB_SETBARINFO, 0, $tINFO, 0, "wparam", "struct*") <> 0
 EndFunc   ;==>_GUICtrlRebar_SetBarInfo
 
 ; #FUNCTION# ====================================================================================================================
 ; Author ........: Gary Frost
-; Modified.......: Jpm
+; Modified.......:
 ; ===============================================================================================================================
 Func _GUICtrlRebar_SetColorScheme($hWnd, $iBtnHighlight, $iBtnShadow)
 	Local $tINFO = DllStructCreate($tagCOLORSCHEME)
+	Local $iSize = DllStructGetSize($tINFO)
 
-	DllStructSetData($tINFO, "Size", DllStructGetSize($tINFO))
+	DllStructSetData($tINFO, "Size", $iSize)
 	DllStructSetData($tINFO, "BtnHighlight", $iBtnHighlight)
 	DllStructSetData($tINFO, "BtnShadow", $iBtnShadow)
 
-	_SendMessage($hWnd, $RB_SETCOLORSCHEME, 0, $tINFO, 0, "wparam", "struct*")
-
+	Local $tMemMap
+	Local $pMemory = _MemInit($hWnd, $iSize, $tMemMap)
+	_MemWrite($tMemMap, $tINFO, $pMemory, $iSize)
+	_SendMessage($hWnd, $RB_SETCOLORSCHEME, 0, $pMemory, 0, "wparam", "ptr")
+	_MemFree($tMemMap)
 EndFunc   ;==>_GUICtrlRebar_SetColorScheme
 
 ; #FUNCTION# ====================================================================================================================

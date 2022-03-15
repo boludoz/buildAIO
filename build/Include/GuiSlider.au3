@@ -4,12 +4,11 @@
 #include "SliderConstants.au3"
 #include "StructureConstants.au3"
 #include "UDFGlobalID.au3"
-#include "WinAPIConv.au3"
-#include "WinAPISysInternals.au3"
+#include "WinAPI.au3"
 
 ; #INDEX# =======================================================================================================================
 ; Title .........: Slider
-; AutoIt Version : 3.3.15.4
+; AutoIt Version : 3.3.14.2
 ; Language ......: English
 ; Description ...: Functions that assist with Slider Control "Trackbar" management.
 ; Author(s) .....: Gary Frost (gafrost)
@@ -106,7 +105,7 @@ Func _GUICtrlSlider_Create($hWnd, $iX, $iY, $iWidth = 100, $iHeight = 20, $iStyl
 	If @error Then Return SetError(@error, @extended, 0)
 
 	Local $hSlider = _WinAPI_CreateWindowEx($iExStyle, $__SLIDERCONSTANT_ClassName, "", $iStyle, $iX, $iY, $iWidth, $iHeight, $hWnd, $nCtrlID)
-	_SendMessage($hSlider, $TBM_SETRANGE, True, _WinAPI_MakeLong(0, 100)) ;  // min. & max. positions
+	_SendMessage($hSlider, $TBM_SETRANGE, True, _WinAPI_MakeLong(0, 100));  // min. & max. positions
 	_GUICtrlSlider_SetTicFreq($hSlider, 5)
 	Return $hSlider
 EndFunc   ;==>_GUICtrlSlider_Create

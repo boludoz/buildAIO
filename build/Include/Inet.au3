@@ -3,11 +3,11 @@
 #include "Date.au3"
 #include "InetConstants.au3"
 #include "StringConstants.au3"
-#include "WinAPIInternals.au3"
+#include "WinAPI.au3"
 
 ; #INDEX# =======================================================================================================================
 ; Title .........: Edit Constants
-; AutoIt Version : 3.3.15.4
+; AutoIt Version : 3.3.14.2
 ; Language ......: English
 ; Description ...: Functions that assist with Internet.
 ; Author(s) .....: Larry, Ezzetabi, Jarvis Stubblefield, Wes Wolfe-Wolvereness, Wouter, Walkabout, Florian Fida, guinness
@@ -37,7 +37,7 @@ Func _GetIP()
 	Local Static $hTimer = 0 ; Create a static variable to store the timer handle.
 	Local Static $sLastIP = 0 ; Create a static variable to store the last IP.
 
-	If TimerDiff($hTimer) < $GETIP_TIMER And Not $sLastIP Then ; If still in the timer and $sLastIP contains a value.
+	If __TimerDiff($hTimer) < $GETIP_TIMER And Not $sLastIP Then ; If still in the timer and $sLastIP contains a value.
 		Return SetExtended(1, $sLastIP) ; Return the last IP instead and set @extended to 1.
 	EndIf
 
@@ -55,22 +55,22 @@ Func _GetIP()
 		http://www.telize.com/ip
 		http://www.trackip.net/ip
 	#ce
-	Local $aGetIPURL = ["https://api.ipify.org", "http://checkip.dyndns.org", "http://www.myexternalip.com/raw", "http://bot.whatismyipaddress.com"], _
-			$aRet = 0, _
+	Local $aGetIPURL[] = ["http://checkip.dyndns.org", "http://www.myexternalip.com/raw", "http://bot.whatismyipaddress.com"], _
+			$aReturn = 0, _
 			$sReturn = ""
 
 	For $i = 0 To UBound($aGetIPURL) - 1
 		$sReturn = InetRead($aGetIPURL[$i])
 		If @error Or $sReturn == "" Then ContinueLoop
-		$aRet = StringRegExp(BinaryToString($sReturn), "((?:\d{1,3}\.){3}\d{1,3})", $STR_REGEXPARRAYGLOBALMATCH) ; [\d\.]{7,15}
+		$aReturn = StringRegExp(BinaryToString($sReturn), "((?:\d{1,3}\.){3}\d{1,3})", $STR_REGEXPARRAYGLOBALMATCH) ; [\d\.]{7,15}
 		If Not @error Then
-			$sReturn = $aRet[0]
+			$sReturn = $aReturn[0]
 			ExitLoop
 		EndIf
 		$sReturn = ""
 	Next
 
-	$hTimer = TimerInit() ; Create a new timer handle.
+	$hTimer = __TimerInit() ; Create a new timer handle.
 	$sLastIP = $sReturn ; Store this IP.
 	If $sReturn == "" Then Return SetError(1, 0, -1)
 	Return $sReturn
@@ -125,7 +125,7 @@ EndFunc   ;==>_INetMail
 ; Author ........: Asimzameer, Walkabout
 ; Modified.......: Jpm
 ; ===============================================================================================================================
-Func _INetSmtpMail($sSMTPServer, $sFromName, $sFromAddress, $sToAddress, $sSubject = "", $aBody = "", $sEHLO = "", $sFirst = " ", $bTrace = 0)
+Func _INetSmtpMail($sSMTPServer, $sFromName, $sFromAddress, $sToAddress, $sSubject = "", $aBody = "", $sEHLO = "", $sFirst = "", $bTrace = 0)
 	If $sSMTPServer = "" Or $sFromAddress = "" Or $sToAddress = "" Or $sFromName = "" Or StringLen($sFromName) > 256 Then Return SetError(1, 0, 0)
 	If $sEHLO = "" Then $sEHLO = @ComputerName
 
@@ -159,16 +159,11 @@ Func _INetSmtpMail($sSMTPServer, $sFromName, $sFromAddress, $sToAddress, $sSubje
 	$aSend[3] = "DATA" & @CRLF
 	$aReplyCode[3] = "354"
 
-	Local $aInfo = _Date_Time_GetTimeZoneInformation()
-	If @error Then
-		TCPShutdown()
-		Return SetError(5, 0, 0)
-	EndIf
-	Local $iBias = $aInfo[1]
-	If $aInfo[0] = 2 Then $iBias += $aInfo[7]
-	$iBias *= -1
-	Local $iBiasH = Int($iBias / 60, 1)
-	Local $iBiasM = Mod($iBias, 60)
+	Local $aResult = _Date_Time_GetTimeZoneInformation()
+	Local $iBias = -$aResult[1] / 60
+	Local $iBiasH = Int($iBias)
+	Local $iBiasM = 0
+	If $iBiasH <> $iBias Then $iBiasM = Abs($iBias - $iBiasH) * 60
 	$iBias = StringFormat(" (%+.2d%.2d)", $iBiasH, $iBiasM)
 
 	$aSend[4] = "From:" & $sFromName & "<" & $sFromAddress & ">" & @CRLF & _
@@ -246,14 +241,14 @@ Func __SmtpSend($vSocket, $sSend, $sReplyCode, $bTrace, $sIntReply = "", $sFirst
 			If TCPSend($vSocket, $sFirst) = 0 Then
 				TCPCloseSocket($vSocket)
 				TCPShutdown()
-				Return 1 ; cannot send
+				Return 1; cannot send
 			EndIf
 		EndIf
 
 		; Check intermediate reply before HELO acceptation
 		$sReceive = ""
-		$hTimer = TimerInit()
-		While StringLeft($sReceive, StringLen($sIntReply)) <> $sIntReply And TimerDiff($hTimer) < 45000
+		$hTimer = __TimerInit()
+		While StringLeft($sReceive, StringLen($sIntReply)) <> $sIntReply And __TimerDiff($hTimer) < 45000
 			$sReceive = TCPRecv($vSocket, 1000)
 			If $bTrace And $sReceive <> "" Then __SmtpTrace("intermediate->" & $sReceive)
 		WEnd
@@ -263,13 +258,13 @@ Func __SmtpSend($vSocket, $sSend, $sReplyCode, $bTrace, $sIntReply = "", $sFirst
 	If TCPSend($vSocket, $sSend) = 0 Then
 		TCPCloseSocket($vSocket)
 		TCPShutdown()
-		Return 1 ; cannot send
+		Return 1; cannot send
 	EndIf
 
-	$hTimer = TimerInit()
+	$hTimer = __TimerInit()
 
 	$sReceive = ""
-	While $sReceive = "" And TimerDiff($hTimer) < 45000
+	While $sReceive = "" And __TimerDiff($hTimer) < 45000
 		$i += 1
 		$sReceive = TCPRecv($vSocket, 1000)
 		If $sReplyCode = "" Then ExitLoop
@@ -283,7 +278,7 @@ Func __SmtpSend($vSocket, $sSend, $sReplyCode, $bTrace, $sIntReply = "", $sFirst
 			TCPCloseSocket($vSocket)
 			TCPShutdown()
 			If $bTrace Then __SmtpTrace("<-> " & $sReplyCode, 5)
-			Return 2 ; bad receive code
+			Return 2; bad receive code
 		EndIf
 	EndIf
 
@@ -339,7 +334,7 @@ EndFunc   ;==>_TCPIpToName
 Func __TCPIpToName_szStringRead($pStr, $iLen = -1)
 	Local $tString
 	If $pStr < 1 Then Return "" ; Null Pointer
-	If $iLen < 0 Then $iLen = _WinAPI_StrLen($pStr, False)
+	If $iLen < 0 Then $iLen = _WinAPI_StringLenA($pStr)
 	$tString = DllStructCreate("char[" & $iLen & "]", $pStr)
 	If @error Then Return SetError(2, 0, "")
 	Return SetExtended($iLen, DllStructGetData($tString, 1))

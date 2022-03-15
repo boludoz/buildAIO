@@ -1,17 +1,13 @@
 #include-once
 
 #include "AVIConstants.au3"
-#include "GUICtrlInternals.au3"
 #include "Memory.au3"
 #include "SendMessage.au3"
 #include "UDFGlobalID.au3"
-#include "WinAPIConv.au3"
-#include "WinAPIInternals.au3"
-#include "WinAPISysInternals.au3"
 
 ; #INDEX# =======================================================================================================================
 ; Title .........: Animation
-; AutoIt Version : 3.3.15.4
+; AutoIt Version : 3.3.14.2
 ; Language ......: English
 ; Description ...: Functions that assist with AVI control management.
 ;                  An animation control is a window that displays an Audio-Video Interleaved (AVI) clip.  An AVI clip is a series
@@ -36,6 +32,7 @@
 
 ; #VARIABLES# ===================================================================================================================
 
+Global $__g_hAVLastWnd
 ; ===============================================================================================================================
 
 ; #CONSTANTS# ===================================================================================================================
@@ -97,7 +94,7 @@ Func _GUICtrlAVI_Destroy(ByRef $hWnd)
 
 	Local $iDestroyed = 0
 	If IsHWnd($hWnd) Then
-		If _WinAPI_InProcess($hWnd, $__g_hGUICtrl_LastWnd) Then
+		If _WinAPI_InProcess($hWnd, $__g_hAVLastWnd) Then
 			Local $nCtrlID = _WinAPI_GetDlgCtrlID($hWnd)
 			Local $hParent = _WinAPI_GetParent($hWnd)
 			$iDestroyed = _WinAPI_DestroyWindow($hWnd)
@@ -133,9 +130,18 @@ EndFunc   ;==>_GUICtrlAVI_IsPlaying
 Func _GUICtrlAVI_Open($hWnd, $sFileName)
 	If Not IsHWnd($hWnd) Then $hWnd = GUICtrlGetHandle($hWnd)
 
-	Local $tBuffer = DllStructCreate("wchar Text[" & StringLen($sFileName) + 1 & "]")
-	DllStructSetData($tBuffer, "Text", $sFileName)
-	Local $iRet = __GUICtrl_SendMsg($hWnd, $ACM_OPENW, 0, $tBuffer)
+	Local $iRet
+	If _WinAPI_InProcess($hWnd, $__g_hAVLastWnd) Then
+		$iRet = _SendMessage($hWnd, $ACM_OPENW, 0, $sFileName, 0, "wparam", "wstr")
+	Else
+		Local $tBuffer = DllStructCreate("wchar Text[" & StringLen($sFileName) + 1 & "]")
+		DllStructSetData($tBuffer, "Text", $sFileName)
+		Local $tMemMap
+		_MemInit($hWnd, DllStructGetSize($tBuffer), $tMemMap)
+		_MemWrite($tMemMap, $tBuffer)
+		$iRet = _SendMessage($hWnd, $ACM_OPENW, True, $tBuffer, 0, "wparam", "struct*")
+		_MemFree($tMemMap)
+	EndIf
 	If $iRet <> 0 Then _GUICtrlAVI_Seek($hWnd, 0)
 	Return SetError(@error, @extended, $iRet <> 0)
 EndFunc   ;==>_GUICtrlAVI_Open

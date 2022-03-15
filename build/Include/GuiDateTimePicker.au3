@@ -1,18 +1,15 @@
 #include-once
 
 #include "DateTimeConstants.au3"
-#include "GUICtrlInternals.au3"
 #include "Memory.au3"
 #include "SendMessage.au3"
 #include "StructureConstants.au3"
 #include "UDFGlobalID.au3"
-#include "WinAPIConv.au3"
-;~ #include "WinAPIGdiInternals.au3"
-#include "WinAPISysInternals.au3"
+#include "WinAPI.au3"
 
 ; #INDEX# =======================================================================================================================
 ; Title .........: Date_Time_Picker
-; AutoIt Version : 3.3.15.4
+; AutoIt Version : 3.3.14.2
 ; Description ...: Functions that assist with date and time picker (DTP) control management.
 ;                  A date and time picker (DTP) control provides a simple and intuitive interface through which to exchange date
 ;                  and time information with a user.  For example, with a DTP control you can ask the user to enter a date and
@@ -21,6 +18,7 @@
 ; ===============================================================================================================================
 
 ; #VARIABLES# ===================================================================================================================
+Global $__g_hDTLastWnd
 
 ; ===============================================================================================================================
 
@@ -68,7 +66,7 @@ Func _GUICtrlDTP_Destroy(ByRef $hWnd)
 
 	Local $iDestroyed = 0
 	If IsHWnd($hWnd) Then
-		If _WinAPI_InProcess($hWnd, $__g_hGUICtrl_LastWnd) Then
+		If _WinAPI_InProcess($hWnd, $__g_hDTLastWnd) Then
 			Local $nCtrlID = _WinAPI_GetDlgCtrlID($hWnd)
 			Local $hParent = _WinAPI_GetParent($hWnd)
 			$iDestroyed = _WinAPI_DestroyWindow($hWnd)
@@ -142,7 +140,17 @@ EndFunc   ;==>_GUICtrlDTP_GetRange
 ; ===============================================================================================================================
 Func _GUICtrlDTP_GetRangeEx($hWnd)
 	Local $tRange = DllStructCreate($tagDTPRANGE)
-	Local $iRet = __GUICtrl_SendMsg($hWnd, $DTM_GETRANGE, 0, $tRange, 0, True)
+	Local $iRet
+	If _WinAPI_InProcess($hWnd, $__g_hDTLastWnd) Then
+		$iRet = _SendMessage($hWnd, $DTM_GETRANGE, 0, $tRange, 0, "wparam", "struct*")
+	Else
+		Local $iRange = DllStructGetSize($tRange)
+		Local $tMemMap
+		Local $pMemory = _MemInit($hWnd, $iRange, $tMemMap)
+		$iRet = _SendMessage($hWnd, $DTM_GETRANGE, 0, $pMemory, 0, "wparam", "ptr")
+		_MemRead($tMemMap, $pMemory, $tRange, $iRange)
+		_MemFree($tMemMap)
+	EndIf
 	DllStructSetData($tRange, "MinValid", BitAND($iRet, $GDTR_MIN) <> 0)
 	DllStructSetData($tRange, "MaxValid", BitAND($iRet, $GDTR_MAX) <> 0)
 	Return $tRange
@@ -167,22 +175,40 @@ EndFunc   ;==>_GUICtrlDTP_GetSystemTime
 
 ; #FUNCTION# ====================================================================================================================
 ; Author ........: Paul Campbell (PaulIA)
-; Modified.......: Jpm
+; Modified.......:
 ; ===============================================================================================================================
 Func _GUICtrlDTP_GetSystemTimeEx($hWnd)
 	Local $tDate = DllStructCreate($tagSYSTEMTIME)
-	Local $iRet = __GUICtrl_SendMsg($hWnd, $DTM_GETSYSTEMTIME, 0, $tDate, 0, True)
+	Local $iRet
+	If _WinAPI_InProcess($hWnd, $__g_hDTLastWnd) Then
+		$iRet = _SendMessage($hWnd, $DTM_GETSYSTEMTIME, 0, $tDate, 0, "wparam", "struct*")
+	Else
+		Local $iDate = DllStructGetSize($tDate)
+		Local $tMemMap
+		Local $pMemory = _MemInit($hWnd, $iDate, $tMemMap)
+		$iRet = _SendMessage($hWnd, $DTM_GETSYSTEMTIME, 0, $pMemory, 0, "wparam", "ptr")
+		_MemRead($tMemMap, $pMemory, $tDate, $iDate)
+		_MemFree($tMemMap)
+	EndIf
 	Return SetError($iRet, $iRet, $tDate)
 EndFunc   ;==>_GUICtrlDTP_GetSystemTimeEx
 
 ; #FUNCTION# ====================================================================================================================
 ; Author ........: Paul Campbell (PaulIA)
-; Modified.......: Jpm
+; Modified.......:
 ; ===============================================================================================================================
 Func _GUICtrlDTP_SetFormat($hWnd, $sFormat)
-	Local $tFormat = DllStructCreate("wchar[" & StringLen($sFormat) + 1 & "]")
-	DllStructSetData($tFormat, 1, $sFormat)
-	Local $iRet = __GUICtrl_SendMsg($hWnd, $DTM_SETFORMATW, 0, $tFormat)
+	Local $iRet
+	If _WinAPI_InProcess($hWnd, $__g_hDTLastWnd) Then
+		$iRet = _SendMessage($hWnd, $DTM_SETFORMATW, 0, $sFormat, 0, "wparam", "wstr")
+	Else
+		Local $iMemory = 2 * (StringLen($sFormat) + 1)
+		Local $tMemMap
+		Local $pMemory = _MemInit($hWnd, $iMemory, $tMemMap)
+		_MemWrite($tMemMap, $sFormat, $pMemory, $iMemory, "wstr")
+		$iRet = _SendMessage($hWnd, $DTM_SETFORMATW, 0, $pMemory, 0, "wparam", "ptr")
+		_MemFree($tMemMap)
+	EndIf
 	Return $iRet <> 0
 EndFunc   ;==>_GUICtrlDTP_SetFormat
 
@@ -227,13 +253,22 @@ EndFunc   ;==>_GUICtrlDTP_SetRange
 
 ; #FUNCTION# ====================================================================================================================
 ; Author ........: Paul Campbell (PaulIA)
-; Modified.......: Jpm
+; Modified.......:
 ; ===============================================================================================================================
 Func _GUICtrlDTP_SetRangeEx($hWnd, ByRef $tRange)
-	Local $iFlags = 0
+	Local $iFlags = 0, $iRet
 	If DllStructGetData($tRange, "MinValid") Then $iFlags = BitOR($iFlags, $GDTR_MIN)
 	If DllStructGetData($tRange, "MaxValid") Then $iFlags = BitOR($iFlags, $GDTR_MAX)
-	Local $iRet = __GUICtrl_SendMsg($hWnd, $DTM_SETRANGE, $iFlags, $tRange)
+	If _WinAPI_InProcess($hWnd, $__g_hDTLastWnd) Then
+		$iRet = _SendMessage($hWnd, $DTM_SETRANGE, $iFlags, $tRange, 0, "wparam", "struct*")
+	Else
+		Local $iRange = DllStructGetSize($tRange)
+		Local $tMemMap
+		Local $pMemory = _MemInit($hWnd, $iRange, $tMemMap)
+		_MemWrite($tMemMap, $tRange)
+		$iRet = _SendMessage($hWnd, $DTM_SETRANGE, $iFlags, $pMemory, 0, "wparam", "ptr")
+		_MemFree($tMemMap)
+	EndIf
 	Return $iRet <> 0
 EndFunc   ;==>_GUICtrlDTP_SetRangeEx
 
@@ -257,13 +292,22 @@ EndFunc   ;==>_GUICtrlDTP_SetSystemTime
 ; Modified.......:
 ; ===============================================================================================================================
 Func _GUICtrlDTP_SetSystemTimeEx($hWnd, ByRef $tDate, $bFlag = False)
-	Local $iFlag
+	Local $iFlag, $iRet
 
 	If $bFlag Then
 		$iFlag = $GDT_NONE
 	Else
 		$iFlag = $GDT_VALID
 	EndIf
-	Local $iRet = __GUICtrl_SendMsg($hWnd, $DTM_SETSYSTEMTIME, $iFlag, $tDate)
+	If _WinAPI_InProcess($hWnd, $__g_hDTLastWnd) Then
+		$iRet = _SendMessage($hWnd, $DTM_SETSYSTEMTIME, $iFlag, $tDate, 0, "wparam", "struct*")
+	Else
+		Local $iDate = DllStructGetSize($tDate)
+		Local $tMemMap
+		Local $pMemory = _MemInit($hWnd, $iDate, $tMemMap)
+		_MemWrite($tMemMap, $tDate)
+		$iRet = _SendMessage($hWnd, $DTM_SETSYSTEMTIME, $iFlag, $pMemory, 0, "wparam", "ptr")
+		_MemFree($tMemMap)
+	EndIf
 	Return $iRet <> 0
 EndFunc   ;==>_GUICtrlDTP_SetSystemTimeEx
